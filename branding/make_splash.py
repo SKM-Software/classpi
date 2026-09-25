@@ -10,15 +10,19 @@ OUT = Path(__file__).resolve().parent / "splash.png"
 
 
 def font(size, bold=True):
-    for name in (
-        "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ):
+    names = (
+        ["DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "arialbd.ttf", "segoeuib.ttf"]
+        if bold else
+        ["DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "arial.ttf", "segoeui.ttf"]
+    )
+    for name in names:
         try:
             return ImageFont.truetype(name, size)
         except OSError:
             continue
-    return ImageFont.load_default()
+    return ImageFont.load_default(size)
 
 
 img = Image.new("RGB", (W, H), BG)
@@ -32,16 +36,16 @@ for r in range(700, 0, -8):
 
 cx, cy = W // 2, H // 2
 
-# logo tile with </>
+# SKM logo tile
 tile = 150
 tx0, ty0 = cx - tile // 2, cy - 190
 d.rounded_rectangle([tx0, ty0, tx0 + tile, ty0 + tile], radius=34, fill=ACCENT)
-lf = font(84)
-d.text((tx0 + tile / 2, ty0 + tile / 2), "</>", font=lf, fill=(11, 26, 42), anchor="mm")
+lf = font(56)
+d.text((tx0 + tile / 2, ty0 + tile / 2), "SKM", font=lf, fill=(11, 26, 42), anchor="mm")
 
 # wordmark
-d.text((cx, cy + 40), "ClassPi", font=font(120), fill=(238, 242, 250), anchor="mm")
-d.text((cx, cy + 140), "Computing Science", font=font(44, bold=False), fill=MUTED, anchor="mm")
+d.text((cx, cy + 40), "ClassPi OS", font=font(120), fill=(238, 242, 250), anchor="mm")
+d.text((cx, cy + 140), "SKM Software  ·  Computing Science", font=font(44, bold=False), fill=MUTED, anchor="mm")
 
 # accent underline
 d.rounded_rectangle([cx - 140, cy + 200, cx + 140, cy + 208], radius=4, fill=ACCENT2)
