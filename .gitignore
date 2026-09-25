@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# local dev config override (real config lives in /etc/classpi on the Pi)
+app/config.json

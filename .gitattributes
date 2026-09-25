@@ -1,0 +1,3 @@
+# The Pi runs these files - keep LF endings everywhere, even on Windows checkouts.
+* text=auto eol=lf
+*.png binary

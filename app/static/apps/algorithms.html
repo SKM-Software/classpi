@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Algorithm Visualiser - ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  .algos { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .algos .btn.on { border-color: #c792ea; background: color-mix(in srgb, #c792ea 20%, var(--panel-2)); }
+  .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; }
+  .array { display: flex; gap: 10px; align-items: flex-end; justify-content: center; height: 260px; margin: 10px 0 6px; }
+  .cell { flex: 1; max-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .bar {
+    width: 100%; border-radius: 10px 10px 4px 4px; background: #34405f; border: 2px solid transparent;
+    display: flex; align-items: flex-start; justify-content: center; padding-top: 6px;
+    font-family: var(--mono); font-weight: 700; font-size: 20px; transition: background .2s, border-color .2s, height .2s;
+  }
+  .bar.cur { background: #c792ea; color: #1b0f2a; }
+  .bar.match { background: var(--good); color: #06231a; }
+  .bar.best { border-color: var(--warn); }
+  .bar.done { opacity: .55; }
+  .idx { font-family: var(--mono); color: var(--muted); font-size: 15px; }
+  .pointer { height: 26px; color: #c792ea; font-weight: 700; font-size: 20px; }
+  pre.code { margin: 0; font-family: var(--mono); font-size: 17px; line-height: 1.7; background: var(--bg-2); border-radius: 12px; padding: 12px 0; overflow: auto; }
+  pre.code div { padding: 0 16px; border-left: 4px solid transparent; white-space: pre; }
+  pre.code div.hl { background: color-mix(in srgb, #c792ea 20%, transparent); border-left-color: #c792ea; }
+  .vars { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+  .var { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .var .k { font-family: var(--mono); color: var(--muted); font-size: 14px; }
+  .var .v { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+  .var.changed { border-color: #c792ea; }
+  .msg { font-size: 20px; min-height: 60px; margin: 16px 0 0; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+  .controls input[type=range] { width: 160px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="home-btn" href="/">&larr; Home <span class="kbd">Esc</span></a>
+  <h1>Algorithm Visualiser</h1>
+  <div class="spacer"></div>
+  <span class="muted" style="font-size:16px"><span class="kbd">Space</span> play/pause, <span class="kbd">&rarr;</span> step, <span class="kbd">R</span> reset, <span class="kbd">A</span> new array</span>
+</div>
+
+<div class="page">
+  <div class="algos" id="algos"></div>
+  <div class="layout">
+    <div class="panel">
+      <div class="array" id="array"></div>
+      <p class="msg" id="msg"></p>
+      <div class="controls">
+        <button class="btn primary" id="play">&#9654; Play</button>
+        <button class="btn" id="step">Step &rarr;</button>
+        <button class="btn" id="reset">Reset</button>
+        <button class="btn" id="newArr">New array</button>
+        <label class="muted">Speed <input type="range" id="speed" min="150" max="1500" step="50" value="700" dir="rtl"></label>
+        <label class="muted" id="targetWrap">Target <input type="number" id="target" style="width:90px"></label>
+      </div>
+    </div>
+    <div class="panel">
+      <pre class="code" id="code"></pre>
+      <div class="vars" id="vars"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+// Each algorithm: Python source (lines) and a generator yielding states.
+const ALGOS = {
+  "Running total": {
+    level: "N5", target: false,
+    code: [
+      "total = 0",
+      "for index in range(len(scores)):",
+      "    total = total + scores[index]",
+      "print(\"Total:\", total)",
+    ],
+    *run(a) {
+      let total = 0;
+      yield { line: 0, vars: { total }, msg: "Start the running total at 0." };
+      for (let i = 0; i < a.length; i++) {
+        yield { line: 1, cur: i, vars: { index: i, total }, msg: `Look at scores[${i}], which is ${a[i]}.` };
+        total += a[i];
+        yield { line: 2, cur: i, done: i, vars: { index: i, total }, msg: `Add it on: total is now ${total}.` };
+      }
+      yield { line: 3, vars: { total }, msg: `Loop finished. The total is ${total}.`, end: true };
+    },
+  },
+  "Linear search": {
+    level: "Higher", target: true,
+    code: [
+      "found = False",
+      "position = 0",
+      "while not found and position < len(scores):",
+      "    if scores[position] == target:",
+      "        found = True",
+      "    else:",
+      "        position = position + 1",
+      "if found:",
+      "    print(\"Found at\", position)",
+      "else:",
+      "    print(\"Not found\")",
+    ],
+    *run(a, t) {
+      let found = false, position = 0;
+      yield { line: 0, vars: { target: t, found }, msg: `Searching for ${t}.` };
+      yield { line: 1, vars: { target: t, found, position }, msg: "Start at position 0." };
+      while (true) {
+        const cont = !found && position < a.length;
+        yield { line: 2, cur: found ? position : (position < a.length ? position : undefined), vars: { target: t, found, position },
+                msg: cont ? `Not found yet and ${position} < ${a.length}, so keep looping.` : (found ? "found is True, so the loop stops." : `position reached ${a.length}, so the loop stops.`) };
+        if (!cont) break;
+        const eq = a[position] === t;
+        yield { line: 3, cur: position, vars: { target: t, found, position }, msg: `Is scores[${position}] (${a[position]}) equal to ${t}? ${eq ? "Yes!" : "No."}` };
+        if (eq) {
+          found = true;
+          yield { line: 4, match: position, vars: { target: t, found, position }, msg: "Set found to True." };
+        } else {
+          position++;
+          yield { line: 6, cur: position < a.length ? position : undefined, done: position - 1, vars: { target: t, found, position }, msg: `Move on to position ${position}.` };
+        }
+      }
+      if (found) yield { line: 8, match: position, vars: { target: t, found, position }, msg: `Found ${t} at position ${position}.`, end: true };
+      else yield { line: 10, vars: { target: t, found, position }, msg: `${t} is not in the array.`, end: true };
+    },
+  },
+  "Count occurrences": {
+    level: "Higher", target: true,
+    code: [
+      "count = 0",
+      "for index in range(len(scores)):",
+      "    if scores[index] == target:",
+      "        count = count + 1",
+      "print(\"Count:\", count)",
+    ],
+    *run(a, t) {
+      let count = 0; const matches = [];
+      yield { line: 0, vars: { target: t, count }, msg: `Counting how many times ${t} appears.` };
+      for (let i = 0; i < a.length; i++) {
+        yield { line: 1, cur: i, matches: [...matches], vars: { target: t, index: i, count }, msg: `Look at scores[${i}].` };
+        const eq = a[i] === t;
+        yield { line: 2, cur: i, matches: [...matches], vars: { target: t, index: i, count }, msg: `${a[i]} == ${t}? ${eq ? "Yes." : "No."}` };
+        if (eq) {
+          count++; matches.push(i);
+          yield { line: 3, matches: [...matches], vars: { target: t, index: i, count }, msg: `Add 1: count is now ${count}.` };
+        }
+      }
+      yield { line: 4, matches, vars: { target: t, count }, msg: `${t} appears ${count} time${count === 1 ? "" : "s"}.`, end: true };
+    },
+  },
+  "Find maximum": {
+    level: "Higher", target: false,
+    code: [
+      "maximum = scores[0]",
+      "for index in range(1, len(scores)):",
+      "    if scores[index] > maximum:",
+      "        maximum = scores[index]",
+      "print(\"Maximum:\", maximum)",
+    ],
+    *run(a) { yield* extreme(a, (x, y) => x > y, "maximum", "bigger"); },
+  },
+  "Find minimum": {
+    level: "Higher", target: false,
+    code: [
+      "minimum = scores[0]",
+      "for index in range(1, len(scores)):",
+      "    if scores[index] < minimum:",
+      "        minimum = scores[index]",
+      "print(\"Minimum:\", minimum)",
+    ],
+    *run(a) { yield* extreme(a, (x, y) => x < y, "minimum", "smaller"); },
+  },
+};
+
+function* extreme(a, better, name, word) {
+  let best = a[0], bestI = 0;
+  yield { line: 0, best: 0, vars: { [name]: best }, msg: `Assume the first value (${best}) is the ${name}.` };
+  for (let i = 1; i < a.length; i++) {
+    yield { line: 1, cur: i, best: bestI, vars: { index: i, [name]: best }, msg: `Look at scores[${i}] (${a[i]}).` };
+    const b = better(a[i], best);
+    yield { line: 2, cur: i, best: bestI, vars: { index: i, [name]: best }, msg: `Is ${a[i]} ${word} than ${best}? ${b ? "Yes." : "No."}` };
+    if (b) {
+      best = a[i]; bestI = i;
+      yield { line: 3, best: bestI, vars: { index: i, [name]: best }, msg: `New ${name}: ${best}.` };
+    }
+  }
+  yield { line: 4, best: bestI, vars: { [name]: best }, msg: `The ${name} is ${best}.`, end: true };
+}
+
+let algoName = "Linear search";
+let arr = [];
+let gen = null, state = null, prevVars = {}, timer = null;
+const $ = (id) => document.getElementById(id);
+
+function newArray() {
+  const n = 8;
+  arr = Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 20));
+  // Make sure a target often appears (sometimes twice) for search/count demos.
+  const t = arr[Math.floor(Math.random() * n)];
+  if (Math.random() < 0.5) arr[Math.floor(Math.random() * n)] = t;
+  $("target").value = Math.random() < 0.85 ? t : 21 + Math.floor(Math.random() * 5);
+  reset();
+}
+
+function reset() {
+  pause();
+  const algo = ALGOS[algoName];
+  gen = algo.run(arr, Number($("target").value));
+  state = { line: -1, vars: {}, msg: "Press Play or Step to begin." };
+  prevVars = {};
+  $("targetWrap").style.display = algo.target ? "" : "none";
+  render();
+}
+
+function step() {
+  if (!gen) return;
+  const r = gen.next();
+  if (r.done) { pause(); return; }
+  prevVars = state.vars || {};
+  state = r.value;
+  render();
+  if (state.end) { pause(); gen = null; }
+}
+
+function play() {
+  if (!gen) reset();
+  if (timer) { pause(); return; }
+  $("play").innerHTML = "&#10074;&#10074; Pause";
+  step();
+  timer = setInterval(step, Number($("speed").value));
+}
+function pause() {
+  clearInterval(timer); timer = null;
+  $("play").innerHTML = "&#9654; Play";
+}
+
+function render() {
+  const max = Math.max(...arr, 20);
+  const wrap = $("array");
+  wrap.innerHTML = "";
+  arr.forEach((v, i) => {
+    const c = document.createElement("div");
+    c.className = "cell";
+    const cls = ["bar"];
+    if (state.cur === i) cls.push("cur");
+    if (state.match === i || (state.matches || []).includes(i)) cls.push("match");
+    if (state.best === i) cls.push("best");
+    c.innerHTML = `<div class="pointer">${state.cur === i ? "&#9660;" : ""}</div>
+      <div class="${cls.join(" ")}" style="height:${40 + (v / max) * 170}px">${v}</div>
+      <div class="idx">[${i}]</div>`;
+    wrap.appendChild(c);
+  });
+  $("msg").textContent = state.msg;
+  $("code").innerHTML = "";
+  ALGOS[algoName].code.forEach((ln, i) => {
+    const d = document.createElement("div");
+    d.textContent = ln || " ";
+    if (i === state.line) d.className = "hl";
+    $("code").appendChild(d);
+  });
+  const vars = { scores: "[" + arr.join(", ") + "]", ...state.vars };
+  $("vars").innerHTML = "";
+  Object.entries(vars).forEach(([k, v]) => {
+    const d = document.createElement("div");
+    d.className = "var" + (k in prevVars && prevVars[k] !== v ? " changed" : "");
+    if (k === "scores") d.style.gridColumn = "1 / -1";
+    d.innerHTML = `<div class="k"></div><div class="v"></div>`;
+    d.querySelector(".k").textContent = k;
+    d.querySelector(".v").textContent = typeof v === "boolean" ? (v ? "True" : "False") : v;
+    if (k === "scores") d.querySelector(".v").style.fontSize = "18px";
+    $("vars").appendChild(d);
+  });
+}
+
+Object.entries(ALGOS).forEach(([name, a]) => {
+  const b = document.createElement("button");
+  b.className = "btn" + (name === algoName ? " on" : "");
+  b.innerHTML = `${name} <span class="chip">${a.level}</span>`;
+  b.onclick = () => {
+    document.querySelectorAll("#algos .btn").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    algoName = name;
+    reset();
+  };
+  $("algos").appendChild(b);
+});
+
+$("play").onclick = play;
+$("step").onclick = () => { pause(); step(); };
+$("reset").onclick = reset;
+$("newArr").onclick = newArray;
+$("target").onchange = reset;
+$("speed").oninput = () => { if (timer) { pause(); play(); } };
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === " ") { e.preventDefault(); play(); }
+  else if (e.key === "ArrowRight") { pause(); step(); }
+  else if (e.key === "r" || e.key === "R") reset();
+  else if (e.key === "a" || e.key === "A") newArray();
+});
+newArray();
+</script>
+</body>
+</html>

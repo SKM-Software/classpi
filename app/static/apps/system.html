@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System - ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+  .stat { padding: 20px; }
+  .stat .k { color: var(--muted); font-size: 15px; text-transform: uppercase; letter-spacing: .5px; }
+  .stat .v { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .stat .sub { color: var(--muted); font-size: 15px; }
+  .meter { height: 8px; border-radius: 4px; background: var(--panel-2); margin-top: 10px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--accent); transition: width .4s; }
+  .meter > div.warn { background: var(--warn); } .meter > div.bad { background: var(--bad); }
+  .power { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 50; }
+  .modal.open { display: grid; }
+  .modal .panel { width: min(420px, 92vw); }
+  .modal input { width: 100%; font-size: 28px; text-align: center; letter-spacing: 8px; font-family: var(--mono); margin: 14px 0; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="home-btn" href="/">&larr; Home <span class="kbd">Esc</span></a>
+  <h1>System</h1>
+  <div class="spacer"></div>
+  <span class="chip" id="model">Raspberry Pi</span>
+</div>
+
+<div class="page">
+  <div class="grid" id="stats"></div>
+
+  <div class="panel" style="margin-top:22px">
+    <h2 style="margin-top:0">Power &amp; kiosk <span class="chip">teacher PIN</span></h2>
+    <p class="muted">These need the teacher PIN set during installation.</p>
+    <div class="power">
+      <button class="btn" data-action="exit_kiosk">Exit to console</button>
+      <button class="btn" data-action="reboot">Restart Pi</button>
+      <button class="btn danger" data-action="shutdown">Shut down Pi</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="pinModal">
+  <div class="panel">
+    <h2 style="margin-top:0" id="pinTitle">Enter teacher PIN</h2>
+    <input type="password" id="pin" inputmode="numeric" maxlength="8" placeholder="PIN">
+    <div style="display:flex; gap:10px">
+      <button class="btn primary" id="pinOk" style="flex:1">Confirm</button>
+      <button class="btn" id="pinCancel">Cancel</button>
+    </div>
+    <p class="muted" id="pinErr" style="min-height:22px"></p>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let pending = null;
+
+function fmtUptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return (d ? d + "d " : "") + (h ? h + "h " : "") + m + "m";
+}
+function meter(pct) {
+  const cls = pct > 85 ? "bad" : pct > 65 ? "warn" : "";
+  return `<div class="meter"><div class="${cls}" style="width:${Math.min(100, pct)}%"></div></div>`;
+}
+
+async function refresh() {
+  let s;
+  try { s = await api("/api/system"); }
+  catch (_) { $("stats").innerHTML = '<div class="stat panel muted">Could not read system info.</div>'; return; }
+  $("model").textContent = s.model;
+  const memPct = s.mem_total_mb ? Math.round((s.mem_used_mb / s.mem_total_mb) * 100) : 0;
+  const diskPct = s.disk_total_gb ? Math.round((s.disk_used_gb / s.disk_total_gb) * 100) : 0;
+  const tempPct = s.temp_c ? Math.round((s.temp_c / 85) * 100) : 0;
+  const cards = [
+    ["Temperature", s.temp_c != null ? s.temp_c + " &deg;C" : "n/a", s.temp_c != null ? (s.temp_c < 60 ? "Healthy" : s.temp_c < 75 ? "Warm" : "Hot - check cooling") : "", tempPct],
+    ["Memory", memPct + "%", `${s.mem_used_mb} / ${s.mem_total_mb} MB`, memPct],
+    ["Disk", diskPct + "%", `${s.disk_used_gb} / ${s.disk_total_gb} GB`, diskPct],
+    ["CPU load", (s.load ? s.load[0] : 0).toFixed(2), `${s.cpu_count} cores - 1/5/15 min: ${(s.load || []).join(", ")}`, s.cpu_count ? Math.round((s.load[0] / s.cpu_count) * 100) : 0],
+    ["Uptime", fmtUptime(s.uptime_seconds), "since last restart", null],
+    ["Network", s.ip, "hostname: " + s.hostname, null],
+  ];
+  $("stats").innerHTML = cards.map(([k, v, sub, pct]) =>
+    `<div class="stat panel"><div class="k">${k}</div><div class="v">${v}</div><div class="sub">${sub}</div>${pct != null ? meter(pct) : ""}</div>`
+  ).join("");
+}
+
+function askPin(action, title) {
+  pending = action;
+  $("pinTitle").textContent = title;
+  $("pinErr").textContent = "";
+  $("pin").value = "";
+  $("pinModal").classList.add("open");
+  setTimeout(() => $("pin").focus(), 50);
+}
+function closePin() { $("pinModal").classList.remove("open"); pending = null; }
+
+async function confirmPin() {
+  if (!pending) return;
+  const pin = $("pin").value;
+  const labels = { reboot: "Restarting...", shutdown: "Shutting down...", exit_kiosk: "Exiting kiosk..." };
+  try {
+    await api("/api/system/action", { method: "POST", body: { pin, action: pending } });
+    $("pinErr").style.color = "var(--good)";
+    $("pinErr").textContent = labels[pending] || "Done";
+    setTimeout(closePin, 1500);
+  } catch (err) {
+    $("pinErr").style.color = "var(--bad)";
+    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : "Could not do that: " + err.message;
+    $("pin").value = ""; $("pin").focus();
+  }
+}
+
+document.querySelectorAll("[data-action]").forEach((b) => b.onclick = () => {
+  const titles = { reboot: "Restart this Pi?", shutdown: "Shut down this Pi?", exit_kiosk: "Exit to the console (login prompt)?" };
+  askPin(b.dataset.action, titles[b.dataset.action]);
+});
+$("pinOk").onclick = confirmPin;
+$("pinCancel").onclick = closePin;
+$("pin").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmPin(); if (e.key === "Escape") closePin(); });
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

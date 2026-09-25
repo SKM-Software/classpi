@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  header.hero {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    padding: 48px 64px 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .logo {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; font-weight: 800; font-size: 28px; color: #0b1a2a;
+    box-shadow: 0 10px 30px rgba(79, 209, 165, .25);
+  }
+  .brand h1 { margin: 0; font-size: 40px; letter-spacing: -.5px; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 20px; }
+  .clock { text-align: right; }
+  .clock .time { font-size: 64px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .clock .date { color: var(--muted); font-size: 20px; margin-top: 6px; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    padding: 24px 64px; flex: 1; align-content: start;
+  }
+  .tile {
+    position: relative; display: flex; flex-direction: column; gap: 10px;
+    padding: 28px; min-height: 190px; border-radius: 22px; text-decoration: none; color: var(--text);
+    background: var(--panel); border: 2px solid var(--line);
+    transition: transform .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .tile:hover, .tile:focus-visible, .tile.sel {
+    outline: none; transform: translateY(-3px); border-color: var(--c, var(--accent));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--c, var(--accent)) 16%, var(--panel)) 0%, var(--panel) 70%);
+  }
+  .tile .icon {
+    width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c);
+  }
+  .tile .icon svg { width: 30px; height: 30px; }
+  .tile h2 { margin: 6px 0 0; font-size: 26px; }
+  .tile p { margin: 0; color: var(--muted); font-size: 17px; }
+  .tile .key { position: absolute; top: 22px; right: 22px; }
+
+  footer {
+    display: flex; justify-content: space-between; padding: 18px 64px 28px; color: var(--muted); font-size: 16px;
+  }
+  @media (max-width: 1000px) {
+    .grid { grid-template-columns: repeat(2, 1fr); padding: 16px; }
+    header.hero, footer { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="brand">
+    <div class="logo">&lt;/&gt;</div>
+    <div>
+      <h1 id="deviceName">ClassPi</h1>
+      <p id="schoolName">Computing Science</p>
+    </div>
+  </div>
+  <div class="clock">
+    <div class="time" id="time">--:--</div>
+    <div class="date" id="date"></div>
+  </div>
+</header>
+
+<main class="grid" id="grid">
+  <a class="tile" href="/apps/python.html" style="--c:#4fd1a5">
+    <span class="kbd key">1</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 2 12 8 18"/><polyline points="16 6 22 12 16 18"/></svg></div>
+    <h2>Python Lab</h2>
+    <p>Write, run and save Python programs.</p>
+  </a>
+  <a class="tile" href="/apps/binary.html" style="--c:#5b9dff">
+    <span class="kbd key">2</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="6" height="16" rx="3"/><line x1="16" y1="4" x2="16" y2="20"/><polyline points="13 7 16 4"/></svg></div>
+    <h2>Binary Trainer</h2>
+    <p>Binary, denary and two's complement practice.</p>
+  </a>
+  <a class="tile" href="/apps/algorithms.html" style="--c:#c792ea">
+    <span class="kbd key">3</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="20" x2="5" y2="12"/><line x1="10" y1="20" x2="10" y2="6"/><line x1="15" y1="20" x2="15" y2="14"/><line x1="20" y1="20" x2="20" y2="9"/></svg></div>
+    <h2>Algorithm Visualiser</h2>
+    <p>Step through the SQA standard algorithms.</p>
+  </a>
+  <a class="tile" href="/apps/network.html" style="--c:#63d3ff">
+    <span class="kbd key">4</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="7" height="6" rx="1"/><rect x="15" y="3" width="7" height="6" rx="1"/><rect x="8.5" y="15" width="7" height="6" rx="1"/><path d="M5.5 9v3h13V9M12 12v3"/></svg></div>
+    <h2>Network Lab</h2>
+    <p>Send messages between Pis, intercept and encrypt.</p>
+  </a>
+  <a class="tile" href="/apps/quiz.html" style="--c:#ffb547">
+    <span class="kbd key">5</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg></div>
+    <h2>Revision Quiz</h2>
+    <p>N5 and Higher questions by topic.</p>
+  </a>
+  <a class="tile" href="/apps/timer.html" style="--c:#ff7eb6">
+    <span class="kbd key">6</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 15 15"/><line x1="9" y1="2" x2="15" y2="2"/></svg></div>
+    <h2>Timer &amp; Picker</h2>
+    <p>Lesson countdown and random name picker.</p>
+  </a>
+  <a class="tile" href="/apps/system.html" style="--c:#9aa7c2">
+    <span class="kbd key">7</span>
+    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="5"/><line x1="15" y1="2" x2="15" y2="5"/><line x1="9" y1="19" x2="9" y2="22"/><line x1="15" y1="19" x2="15" y2="22"/><line x1="2" y1="9" x2="5" y2="9"/><line x1="2" y1="15" x2="5" y2="15"/><line x1="19" y1="9" x2="22" y2="9"/><line x1="19" y1="15" x2="22" y2="15"/></svg></div>
+    <h2>System</h2>
+    <p>Pi health, network and power options.</p>
+  </a>
+</main>
+
+<footer>
+  <span>Arrow keys to move, <span class="kbd">Enter</span> to open, <span class="kbd">1</span>-<span class="kbd">7</span> to jump. <span class="kbd">Esc</span> returns here.</span>
+  <span id="host"></span>
+</footer>
+
+<script src="/js/common.js"></script>
+<script>
+  const tiles = [...document.querySelectorAll(".tile")];
+  let sel = Number(sessionStorage.getItem("classpi-sel") || 0);
+  function select(i) {
+    sel = (i + tiles.length) % tiles.length;
+    tiles.forEach((t, j) => t.classList.toggle("sel", j === sel));
+    tiles[sel].focus({ preventScroll: true });
+    try { sessionStorage.setItem("classpi-sel", sel); } catch (_) {}
+  }
+  function cols() {
+    return getComputedStyle(document.getElementById("grid")).gridTemplateColumns.split(" ").length;
+  }
+  document.addEventListener("keydown", (e) => {
+    const c = cols();
+    if (e.key === "ArrowRight") select(sel + 1);
+    else if (e.key === "ArrowLeft") select(sel - 1);
+    else if (e.key === "ArrowDown") select(sel + c);
+    else if (e.key === "ArrowUp") select(sel - c);
+    else if (/^[1-9]$/.test(e.key) && tiles[e.key - 1]) location.href = tiles[e.key - 1].href;
+    else return;
+    e.preventDefault();
+  });
+  tiles.forEach((t, i) => t.addEventListener("mouseenter", () => select(i)));
+  select(sel);
+
+  function tick() {
+    const now = new Date();
+    document.getElementById("time").textContent =
+      now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    document.getElementById("date").textContent =
+      now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  }
+  tick(); setInterval(tick, 1000);
+
+  api("/api/info").then((i) => {
+    document.getElementById("deviceName").textContent = i.device_name;
+    document.getElementById("schoolName").textContent = i.school_name;
+    document.getElementById("host").textContent = `${i.hostname} - ClassPi OS ${i.version}`;
+    document.title = i.device_name;
+  }).catch(() => {});
+</script>
+</body>
+</html>

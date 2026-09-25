@@ -1,0 +1,48 @@
+{
+  "title": "Computing Science Revision",
+  "topics": {
+    "Data representation (N5)": [
+      {"q": "How many bits are in one byte?", "a": ["8", "4", "16", "1024"], "correct": 0},
+      {"q": "What is the denary value of the binary number 1010?", "a": ["8", "10", "12", "20"], "correct": 1},
+      {"q": "Which is the largest denary number you can store in 8 bits (unsigned)?", "a": ["127", "255", "256", "512"], "correct": 1},
+      {"q": "Characters are represented in the computer using...", "a": ["ASCII / Unicode", "Floating point", "Two's complement", "Hexadecimal only"], "correct": 0},
+      {"q": "A real number (with a decimal point) is stored using...", "a": ["An integer", "Floating point representation", "ASCII", "A Boolean"], "correct": 1},
+      {"q": "How is a negative integer typically stored?", "a": ["A minus character", "Two's complement", "A separate sign file", "It cannot be stored"], "correct": 1},
+      {"q": "The resolution of a bitmap image is measured in...", "a": ["Hertz", "Pixels (e.g. 1920x1080)", "Bytes per second", "Vectors"], "correct": 1}
+    ],
+    "Software design & development (N5)": [
+      {"q": "Which construct repeats a block a fixed number of times?", "a": ["Fixed loop (for)", "If statement", "Conditional loop (while)", "Function"], "correct": 0},
+      {"q": "A variable that can only be True or False is which data type?", "a": ["Integer", "String", "Boolean", "Real"], "correct": 2},
+      {"q": "What does the design notation 'pseudocode' describe?", "a": ["The finished program", "The logic/steps in structured English", "The test results", "The user interface only"], "correct": 1},
+      {"q": "Checking a program gives the expected output for normal, extreme and exceptional data is called...", "a": ["Debugging", "Testing", "Compiling", "Translating"], "correct": 1},
+      {"q": "A syntax error is...", "a": ["A mistake in the rules/grammar of the language", "A wrong answer that still runs", "A hardware fault", "A network problem"], "correct": 0},
+      {"q": "Which is an example of exceptional test data for 'enter a mark 0-100'?", "a": ["50", "0", "100", "150"], "correct": 3},
+      {"q": "Storing many values under one name with an index uses a...", "a": ["Array", "Boolean", "Constant", "Character"], "correct": 0}
+    ],
+    "Standard algorithms (Higher)": [
+      {"q": "Which algorithm finds whether a value is present by checking each item in turn?", "a": ["Linear search", "Find maximum", "Count occurrences", "Running total"], "correct": 0},
+      {"q": "The 'count occurrences' algorithm needs which variable initialised to 0?", "a": ["found", "maximum", "count", "position"], "correct": 2},
+      {"q": "In 'find maximum', what is the maximum usually set to before the loop?", "a": ["0", "The first element of the array", "The last element", "-1"], "correct": 1},
+      {"q": "Linear search often uses a Boolean flag called...", "a": ["done", "found", "search", "match"], "correct": 1},
+      {"q": "Which loop is best for a linear search that can stop early?", "a": ["Fixed loop", "Conditional (while) loop", "Nested fixed loops", "No loop"], "correct": 1}
+    ],
+    "Computer systems (Higher)": [
+      {"q": "What does the ALU do?", "a": ["Stores the program", "Arithmetic and logic operations", "Controls the monitor", "Connects to the network"], "correct": 1},
+      {"q": "Which bus carries the location of data to/from memory?", "a": ["Data bus", "Address bus", "Control bus", "USB"], "correct": 1},
+      {"q": "Two's complement is used to represent...", "a": ["Text", "Positive and negative integers", "Colours", "Sound"], "correct": 1},
+      {"q": "Increasing the number of bits used per sample in sound will...", "a": ["Reduce the file size", "Increase the quality and file size", "Have no effect", "Only change the length"], "correct": 1}
+    ],
+    "Web & databases (N5)": [
+      {"q": "Which language defines the STRUCTURE of a web page?", "a": ["CSS", "HTML", "JavaScript", "SQL"], "correct": 1},
+      {"q": "Which is used to style the appearance of a web page?", "a": ["HTML", "CSS", "SQL", "Python"], "correct": 1},
+      {"q": "In a database, a field that uniquely identifies each record is the...", "a": ["Foreign key", "Primary key", "Attribute", "Query"], "correct": 1},
+      {"q": "Which SQL keyword retrieves data from a table?", "a": ["GET", "SELECT", "FIND", "OPEN"], "correct": 1}
+    ],
+    "Security & networks (Higher)": [
+      {"q": "Encrypting a message means...", "a": ["Deleting it", "Scrambling it so only someone with the key can read it", "Compressing it", "Sending it faster"], "correct": 1},
+      {"q": "A man-in-the-middle attack involves...", "a": ["A virus on one computer", "Someone secretly reading/altering messages between two parties", "A power cut", "Too much traffic"], "correct": 1},
+      {"q": "If a message is sent unencrypted across a network, an interceptor can...", "a": ["Not read it", "Read its contents in plain text", "Only see the length", "Only see the sender"], "correct": 1},
+      {"q": "Symmetric encryption uses...", "a": ["No key", "The same key to encrypt and decrypt", "A public and private key pair", "A password only"], "correct": 1}
+    ]
+  }
+}

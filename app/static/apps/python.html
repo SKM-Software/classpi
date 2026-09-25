@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python Lab - ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .work { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; padding: 18px 28px 24px; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .label { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); display: flex; justify-content: space-between; }
+  .editor-wrap { flex: 1; display: flex; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); overflow: hidden; min-height: 0; }
+  .gutter {
+    padding: 14px 10px 14px 14px; text-align: right; color: #56627e; font-family: var(--mono); font-size: 17px;
+    line-height: 1.55; user-select: none; white-space: pre; overflow: hidden; background: #111827;
+  }
+  textarea.code {
+    flex: 1; resize: none; border: 0; border-radius: 0; background: transparent; outline: none;
+    font-family: var(--mono); font-size: 17px; line-height: 1.55; padding: 14px; tab-size: 4; white-space: pre; overflow: auto;
+  }
+  textarea.code:focus { outline: none; }
+  #stdin { height: 90px; resize: none; font-family: var(--mono); font-size: 16px; }
+  #output {
+    flex: 1; margin: 0; padding: 14px; background: #0a0f1a; border: 1px solid var(--line); border-radius: 14px;
+    font-family: var(--mono); font-size: 16px; white-space: pre-wrap; overflow: auto; min-height: 0;
+  }
+  #output.err { border-color: #6b2c36; }
+  #status.ok { color: var(--good); } #status.bad { color: var(--bad); }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 50; }
+  .modal.open { display: grid; }
+  .modal .panel { width: min(560px, 92vw); max-height: 80vh; overflow: auto; }
+  .filelist { list-style: none; padding: 0; margin: 12px 0; }
+  .filelist li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
+  .filelist li:hover, .filelist li:focus { background: var(--panel-2); outline: none; }
+  .filelist li span { flex: 1; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="home-btn" href="/">&larr; Home <span class="kbd">Esc</span></a>
+  <h1>Python Lab</h1>
+  <span class="chip" id="fileChip">untitled.py</span>
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <select id="examples" aria-label="Examples">
+      <option value="">Load an example...</option>
+    </select>
+    <button class="btn" id="newBtn">New</button>
+    <button class="btn" id="openBtn">Open</button>
+    <button class="btn" id="saveBtn">Save <span class="kbd">Ctrl+S</span></button>
+    <button class="btn primary" id="runBtn">&#9654; Run <span class="kbd" style="color:#06231a;background:transparent;border-color:#06231a55">Ctrl+Enter</span></button>
+  </div>
+</div>
+
+<div class="work">
+  <div class="col">
+    <div class="label"><span>Code</span><span id="cursorPos">Ln 1, Col 1</span></div>
+    <div class="editor-wrap">
+      <div class="gutter" id="gutter">1</div>
+      <textarea class="code" id="code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    </div>
+  </div>
+  <div class="col">
+    <div class="label"><span>Input (one line per input())</span></div>
+    <textarea id="stdin" placeholder="Type answers for input() here, one per line"></textarea>
+    <div class="label"><span>Output</span><span id="status"></span></div>
+    <pre id="output" class="muted">Press Run to see your program's output here.</pre>
+  </div>
+</div>
+
+<div class="modal" id="openModal">
+  <div class="panel">
+    <h2 style="margin-top:0">Open a saved program</h2>
+    <p class="muted" id="folderNote"></p>
+    <ul class="filelist" id="fileList"></ul>
+    <button class="btn" id="closeOpen">Close</button>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+const EXAMPLES = {
+  "Hello, world": `print("Hello, world!")\nname = input("What is your name? ")\nprint("Nice to meet you,", name)\n`,
+  "Input validation": `# SQA standard algorithm: input validation\nmark = int(input("Enter a mark (0-100): "))\nwhile mark < 0 or mark > 100:\n    print("Invalid - must be between 0 and 100")\n    mark = int(input("Enter a mark (0-100): "))\nprint("Accepted:", mark)\n`,
+  "Running total": `# SQA standard algorithm: running total within a loop\ntotal = 0\nfor i in range(5):\n    score = int(input("Enter score " + str(i + 1) + ": "))\n    total = total + score\nprint("Total:", total)\nprint("Average:", round(total / 5, 1))\n`,
+  "Traverse an array": `# Traversing a 1D array\nnames = ["Aisha", "Callum", "Eilidh", "Ross", "Morven"]\nfor index in range(len(names)):\n    print(index, names[index])\n`,
+  "Linear search": `# Higher standard algorithm: linear search\nscores = [45, 78, 12, 90, 66, 78]\ntarget = int(input("Search for: "))\nfound = False\nposition = 0\nwhile not found and position < len(scores):\n    if scores[position] == target:\n        found = True\n    else:\n        position = position + 1\nif found:\n    print("Found at position", position)\nelse:\n    print("Not found")\n`,
+  "Count occurrences": `# Higher standard algorithm: count occurrences\ngrades = ["A", "B", "A", "C", "A", "D", "B"]\ncount = 0\nfor grade in grades:\n    if grade == "A":\n        count = count + 1\nprint("Number of A grades:", count)\n`,
+  "Find maximum": `# Higher standard algorithm: find maximum\ntemps = [12.5, 15.1, 9.8, 18.3, 14.0]\nmaximum = temps[0]\nfor t in temps:\n    if t > maximum:\n        maximum = t\nprint("Highest temperature:", maximum)\n`,
+  "Records (Higher)": `# Higher: an array of records using a dataclass\nfrom dataclasses import dataclass\n\n@dataclass\nclass Pupil:\n    name: str\n    house: str\n    score: int\n\npupils = [Pupil("Ava", "Clyde", 82), Pupil("Finn", "Kelvin", 67), Pupil("Isla", "Clyde", 91)]\nfor p in pupils:\n    if p.house == "Clyde":\n        print(p.name, p.score)\n`,
+  "Parallel arrays + file (Higher)": `# Higher: write then read a CSV file\nnames = ["Ava", "Finn", "Isla"]\nscores = [82, 67, 91]\n\nwith open("results.csv", "w") as f:\n    for i in range(len(names)):\n        f.write(names[i] + "," + str(scores[i]) + "\\n")\n\nwith open("results.csv") as f:\n    for line in f:\n        name, score = line.strip().split(",")\n        print(name, "scored", score)\n`,
+};
+
+const code = document.getElementById("code");
+const gutter = document.getElementById("gutter");
+const out = document.getElementById("output");
+const statusEl = document.getElementById("status");
+let fileName = null;
+let dirty = false;
+
+const sel = document.getElementById("examples");
+Object.keys(EXAMPLES).forEach((k) => sel.add(new Option(k, k)));
+sel.addEventListener("change", () => {
+  if (!sel.value) return;
+  if (dirty && !confirm("Replace your current code with this example?")) { sel.value = ""; return; }
+  setCode(EXAMPLES[sel.value], null);
+  sel.value = "";
+  code.focus();
+});
+
+function setCode(text, name) {
+  code.value = text;
+  fileName = name;
+  dirty = false;
+  document.getElementById("fileChip").textContent = name || "untitled.py";
+  updateGutter();
+  try { localStorage.setItem("classpi-code", text); } catch (_) {}
+}
+function markDirty() {
+  dirty = true;
+  document.getElementById("fileChip").textContent = (fileName || "untitled.py") + " *";
+  try { localStorage.setItem("classpi-code", code.value); } catch (_) {}
+}
+
+function updateGutter() {
+  const n = code.value.split("\n").length;
+  let s = "";
+  for (let i = 1; i <= n; i++) s += i + "\n";
+  gutter.textContent = s;
+  gutter.scrollTop = code.scrollTop;
+}
+function updateCursor() {
+  const before = code.value.slice(0, code.selectionStart).split("\n");
+  document.getElementById("cursorPos").textContent = `Ln ${before.length}, Col ${before[before.length - 1].length + 1}`;
+}
+code.addEventListener("input", () => { updateGutter(); markDirty(); });
+code.addEventListener("scroll", () => { gutter.scrollTop = code.scrollTop; });
+code.addEventListener("keyup", updateCursor);
+code.addEventListener("click", updateCursor);
+
+// Editor keys: Tab indents 4 spaces, Shift+Tab dedents, Enter keeps indentation (+4 after a colon)
+code.addEventListener("keydown", (e) => {
+  const { selectionStart: s, selectionEnd: en, value: v } = code;
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+    if (e.shiftKey) {
+      const m = v.slice(lineStart).match(/^ {1,4}/);
+      if (m) {
+        code.setRangeText("", lineStart, lineStart + m[0].length, "preserve");
+        code.selectionStart = code.selectionEnd = Math.max(lineStart, s - m[0].length);
+      }
+    } else if (s !== en && v.slice(s, en).includes("\n")) {
+      const block = v.slice(lineStart, en).replace(/^/gm, "    ");
+      code.setRangeText(block, lineStart, en, "select");
+    } else {
+      code.setRangeText("    ", s, en, "end");
+    }
+    updateGutter(); markDirty();
+  } else if (e.key === "Enter" && !e.ctrlKey) {
+    e.preventDefault();
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+    const line = v.slice(lineStart, s);
+    let indent = line.match(/^ */)[0];
+    if (/:\s*(#.*)?$/.test(line)) indent += "    ";
+    code.setRangeText("\n" + indent, s, en, "end");
+    updateGutter(); markDirty();
+  } else if (e.key === "Backspace" && s === en) {
+    const lineStart = v.lastIndexOf("\n", s - 1) + 1;
+    const before = v.slice(lineStart, s);
+    if (before.length && /^ +$/.test(before) && before.length % 4 === 0) {
+      e.preventDefault();
+      code.setRangeText("", s - 4, s, "end");
+      updateGutter(); markDirty();
+    }
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); run(); }
+  if (e.ctrlKey && (e.key === "s" || e.key === "S")) { e.preventDefault(); save(); }
+  if (e.key === "Escape" && document.getElementById("openModal").classList.contains("open")) closeOpen();
+});
+
+async function run() {
+  const btn = document.getElementById("runBtn");
+  btn.disabled = true;
+  out.className = "";
+  out.textContent = "Running...";
+  statusEl.textContent = ""; statusEl.className = "";
+  try {
+    const r = await api("/api/run", { method: "POST", body: { code: code.value, stdin: document.getElementById("stdin").value } });
+    out.textContent = r.output || "(no output)";
+    out.className = r.ok ? "" : "err";
+    statusEl.textContent = (r.ok ? "Finished" : "Error") + ` in ${r.seconds}s`;
+    statusEl.className = r.ok ? "ok" : "bad";
+  } catch (err) {
+    out.textContent = "Could not run: " + err.message;
+    out.className = "err";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function save() {
+  let name = fileName;
+  if (!name) {
+    name = prompt("Save as (e.g. task1.py):", "my_program.py");
+    if (!name) return;
+    if (!name.endsWith(".py")) name += ".py";
+  }
+  try {
+    await api("/api/files/" + encodeURIComponent(name), { method: "POST", body: { code: code.value } });
+    fileName = name; dirty = false;
+    document.getElementById("fileChip").textContent = name;
+    toast("Saved " + name);
+  } catch (err) {
+    toast("Not saved: " + err.message, 4000);
+  }
+}
+
+async function openDialog() {
+  const modal = document.getElementById("openModal");
+  const list = document.getElementById("fileList");
+  list.innerHTML = "";
+  try {
+    const r = await api("/api/files");
+    document.getElementById("folderNote").textContent = "Saved in " + r.folder;
+    if (!r.files.length) list.innerHTML = '<li class="muted">No saved programs yet.</li>';
+    r.files.forEach((f) => {
+      const li = document.createElement("li");
+      li.tabIndex = 0;
+      const when = new Date(f.modified * 1000).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" });
+      li.innerHTML = `<span></span><span class="muted" style="flex:0">${when}</span><button class="btn danger" title="Delete">Delete</button>`;
+      li.firstChild.textContent = f.name;
+      const open = async () => {
+        const d = await api("/api/files/" + encodeURIComponent(f.name));
+        setCode(d.code, d.name); closeOpen(); code.focus();
+      };
+      li.addEventListener("click", (e) => { if (e.target.tagName !== "BUTTON") open(); });
+      li.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+      li.querySelector("button").addEventListener("click", async () => {
+        if (!confirm("Delete " + f.name + "?")) return;
+        await api("/api/files/" + encodeURIComponent(f.name), { method: "DELETE" });
+        openDialog();
+      });
+      list.appendChild(li);
+    });
+  } catch (err) {
+    list.innerHTML = '<li class="muted">Could not list files.</li>';
+  }
+  modal.classList.add("open");
+  const first = list.querySelector("li[tabindex]");
+  (first || document.getElementById("closeOpen")).focus();
+}
+function closeOpen() { document.getElementById("openModal").classList.remove("open"); }
+
+document.getElementById("runBtn").onclick = run;
+document.getElementById("saveBtn").onclick = save;
+document.getElementById("openBtn").onclick = openDialog;
+document.getElementById("closeOpen").onclick = closeOpen;
+document.getElementById("newBtn").onclick = () => {
+  if (dirty && !confirm("Start a new program? Unsaved changes will be lost.")) return;
+  setCode("", null); code.focus();
+};
+
+let saved = null;
+try { saved = localStorage.getItem("classpi-code"); } catch (_) {}
+setCode(saved || EXAMPLES["Hello, world"], null);
+code.focus();
+</script>
+</body>
+</html>

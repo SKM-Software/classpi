@@ -1,0 +1,11 @@
+{
+  "device_name": "ClassPi",
+  "school_name": "Computing Science",
+  "teacher_pin": "1234",
+  "net_key": "clyde-kelvin",
+  "host": "127.0.0.1",
+  "port": 8080,
+  "net_port": 8090,
+  "work_dir": "~/ClassPi-Work",
+  "run_timeout_seconds": 5
+}

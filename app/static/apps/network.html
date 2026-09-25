@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Lab - ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  .page { max-width: 1500px; }
+  .lab { display: grid; grid-template-columns: 1fr 360px; gap: 22px; }
+  @media (max-width: 1100px){ .lab{ grid-template-columns: 1fr; } }
+
+  .stage { position: relative; padding: 40px 20px 20px; overflow: hidden; }
+  .wire {
+    position: absolute; top: 130px; height: 8px; border-radius: 4px;
+    background: repeating-linear-gradient(90deg, #34405f 0 14px, #2a344f 14px 28px);
+  }
+  .wire.hot { background: repeating-linear-gradient(90deg, var(--accent-2) 0 14px, #2a344f 14px 28px); }
+  .nodes { position: relative; display: flex; justify-content: space-between; align-items: flex-start; z-index: 2; }
+  .node { width: 200px; text-align: center; }
+  .box {
+    height: 120px; border-radius: 18px; border: 2px solid var(--line); background: var(--panel-2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .box .role { font-weight: 700; font-size: 20px; }
+  .box .ip { font-family: var(--mono); font-size: 14px; color: var(--muted); }
+  .box svg { width: 34px; height: 34px; }
+  .node.sender .box { border-color: var(--accent); }
+  .node.receiver .box { border-color: var(--good); }
+  .node.relay .box { border-color: var(--warn); }
+  .box.active { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-2) 40%, transparent); }
+  .node.off { opacity: .35; }
+  .seen {
+    margin-top: 12px; min-height: 74px; border-radius: 12px; padding: 10px; font-family: var(--mono);
+    font-size: 14px; background: var(--bg-2); border: 1px dashed var(--line); word-break: break-all; text-align: left;
+  }
+  .seen .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .seen.leak { border-color: var(--bad); color: #ffd6d6; }
+  .seen.safe { border-color: var(--good); color: #cffbe9; }
+
+  .packet {
+    position: absolute; top: 96px; left: 0; z-index: 3; padding: 8px 12px; border-radius: 10px;
+    font-family: var(--mono); font-size: 14px; max-width: 240px; word-break: break-all;
+    background: var(--accent); color: #06231a; box-shadow: 0 8px 20px rgba(0,0,0,.35);
+    opacity: 0; transform: translateX(0); pointer-events: none;
+  }
+  .packet.enc { background: var(--warn); color: #2a1c00; }
+  .packet .tag { display:block; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; opacity: .75; }
+  .packet.strong { background: var(--good); color: #06231a; }
+  .seen.warn { border-color: var(--warn); color: #ffe4b0; }
+  .trace .warn { color: #ffe4b0; }
+  .pigline svg { margin: 0 1px; }
+  select { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .row label { min-width: 92px; color: var(--muted); }
+  .row input[type=text] { flex: 1; min-width: 140px; }
+  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+  .switch input { display: none; }
+  .track { width: 52px; height: 30px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); position: relative; transition: background .2s; }
+  .track::after { content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:var(--muted); transition: left .2s, background .2s; }
+  .switch input:checked + .track { background: color-mix(in srgb, var(--good) 40%, var(--panel-2)); }
+  .switch input:checked + .track::after { left: 26px; background: var(--good); }
+
+  .trace { font-family: var(--mono); font-size: 14px; }
+  .trace div { padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; background: var(--bg-2); word-break: break-all; }
+  .trace .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .trace .leak { color: #ffb0b0; }
+  .trace .safe { color: #9dffdf; }
+  details.note { margin-top: 16px; color: var(--muted); font-size: 15px; }
+  summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="home-btn" href="/">&larr; Home <span class="kbd">Esc</span></a>
+  <h1>Network Lab</h1>
+  <span class="chip">Higher: encryption &amp; network security</span>
+  <div class="spacer"></div>
+  <span id="modeChip" class="chip">Simulation</span>
+</div>
+
+<div class="rolebar" style="display:flex;gap:10px;align-items:center;padding:14px 28px 0;flex-wrap:wrap;max-width:1500px;margin:0 auto">
+  <span class="muted">This Pi's screen:</span>
+  <button class="btn on" data-role="sender">Sender / control</button>
+  <button class="btn" data-role="middle">Middle (spy) screen</button>
+  <button class="btn" data-role="receiver">Receiver screen</button>
+  <span style="flex:1"></span>
+  <label class="switch" title="Show the animated diagram (sender only)" style="display:inline-flex;align-items:center;gap:8px">
+    <input type="checkbox" id="showAnim" checked><span class="track"></span>
+  </label>
+  <span class="muted" id="animLbl">Show animation</span>
+</div>
+
+<div class="page">
+  <section id="senderMode">
+  <div class="lab">
+    <div class="panel stage" id="stage">
+      <div class="wire" id="wireL"></div>
+      <div class="wire" id="wireR"></div>
+      <div class="packet" id="packet"></div>
+      <div class="nodes">
+        <div class="node sender" id="nSender">
+          <div class="box" id="bSender">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
+            <span class="role">Sender</span><span class="ip" id="ipSender">this Pi</span>
+          </div>
+          <div class="seen"><span class="lbl">Typed message</span><div id="seenSender">-</div></div>
+        </div>
+        <div class="node relay" id="nRelay">
+          <div class="box" id="bRelay">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a5 5 0 0 0-5 5v3H5v10h14V10h-2V7a5 5 0 0 0-5-5z"/><circle cx="12" cy="15" r="1.5"/></svg>
+            <span class="role">Middle (relay)</span><span class="ip" id="ipRelay">optional</span>
+          </div>
+          <div class="seen" id="seenRelayWrap"><span class="lbl">What the middle can read</span><div id="seenRelay">-</div></div>
+        </div>
+        <div class="node receiver" id="nReceiver">
+          <div class="box" id="bReceiver">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
+            <span class="role">Receiver</span><span class="ip" id="ipReceiver">another Pi</span>
+          </div>
+          <div class="seen"><span class="lbl">Message read</span><div id="seenReceiver">-</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label for="msg">Message</label>
+        <input type="text" id="msg" value="Meet me at the gates at 3pm" maxlength="200">
+      </div>
+      <div class="row">
+        <label class="switch" title="Add a middle Pi">
+          <input type="checkbox" id="useRelay"><span class="track"></span>
+        </label>
+        <span>Put a Pi in the middle</span>
+      </div>
+      <div class="row">
+        <label for="cipher">Encryption</label>
+        <select id="cipher" style="flex:1">
+          <option value="none">None - plaintext</option>
+          <option value="caesar">Caesar shift (classical)</option>
+          <option value="vigenere">Vigenere cipher (classical)</option>
+          <option value="pigpen">Pigpen cipher (classical)</option>
+          <option value="modern">Modern encryption - AES (strong)</option>
+        </select>
+      </div>
+      <div class="row cipher-param" id="paramCaesar" style="display:none">
+        <label for="shift">Shift by</label>
+        <input type="number" id="shift" value="3" min="1" max="25" style="width:80px">
+        <span class="muted" style="font-size:14px">letters (1-25)</span>
+      </div>
+      <div class="row cipher-param" id="paramVigenere" style="display:none">
+        <label for="vkey">Keyword</label>
+        <input type="text" id="vkey" value="SCHOOL" maxlength="20" autocomplete="off">
+      </div>
+      <div class="row cipher-param" id="paramPigpen" style="display:none">
+        <span class="muted" style="font-size:14px;flex:1">Letters become symbols. No secret key - anyone with the key card can read it.</span>
+        <button type="button" class="btn" id="pigKeyBtn">Show key</button>
+      </div>
+      <div class="row cipher-param" id="paramModern" style="display:none">
+        <span class="muted" style="font-size:14px">Uses the shared key set when ClassPi was installed. The key never travels with the message.</span>
+      </div>
+      <button class="btn primary" id="sendBtn" style="width:100%; font-size:20px; padding:14px">&#9654; Send message</button>
+
+      <div class="trace" id="trace" style="margin-top:18px"></div>
+
+      <details style="margin-top:14px">
+        <summary class="muted">Connect real Pis</summary>
+        <div class="row" style="margin-top:12px"><label>Receiver IP</label><input type="text" id="receiverIp" placeholder="e.g. 192.168.1.42"></div>
+        <div class="row"><label>Relay IP</label><input type="text" id="relayIp" placeholder="e.g. 192.168.1.43"></div>
+        <div class="row">
+          <button class="btn" id="testBtn">Test connections</button>
+          <button class="btn" id="clearBtn">Clear inboxes</button>
+        </div>
+        <p class="muted" id="netStatus" style="font-size:14px"></p>
+      </details>
+
+      <details class="note">
+        <summary>Teaching notes</summary>
+        <p><b>Plaintext:</b> anyone in the middle reads it. <b>Classical ciphers</b> (Caesar, Vigenere, Pigpen) scramble the text, but the middle can still crack them - the "Crack it" button on the middle screen shows how (brute-forcing 25 Caesar shifts, or reading pigpen off the key card). This is why they are not used for real security. <b>Modern encryption (AES)</b> needs a secret key that never travels, so the middle is stuck with gibberish.</p>
+        <p>A nice point for pupils (Kerckhoffs's principle): the algorithm can be public knowledge - what keeps a message safe is the secrecy of the <i>key</i>, not the method.</p>
+        <p>The middle Pi here is an honest relay you route through on purpose, so the whole demo runs safely on your own kit. Real attacks (e.g. ARP spoofing) force traffic through an attacker without consent - worth naming for pupils, but not something to run on a live network.</p>
+      </details>
+    </div>
+  </div>
+  </section>
+
+  <section id="monitorMode" class="hidden">
+    <div class="panel" style="text-align:center;padding:36px 24px">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px">
+        <span class="chip" id="monRole"></span>
+        <span class="chip" id="monHost">this Pi</span>
+        <span class="chip" id="monLive">waiting...</span>
+      </div>
+      <div class="muted" id="monHint" style="font-size:18px"></div>
+      <div id="monLatest" style="margin:22px 0;min-height:22vmin;display:grid;place-items:center">
+        <div class="muted" style="font-size:22px">Waiting for a message...</div>
+      </div>
+      <div id="monLog" style="text-align:left;max-width:720px;margin:0 auto"></div>
+    </div>
+  </section>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const stage = $("stage"), packet = $("packet");
+let busy = false;
+
+function layout() {
+  const s = $("bSender").getBoundingClientRect();
+  const m = $("bRelay").getBoundingClientRect();
+  const r = $("bReceiver").getBoundingClientRect();
+  const st = stage.getBoundingClientRect();
+  const cx = (el) => el.left - st.left + el.width / 2;
+  return { sx: cx(s), mx: cx(m), rx: cx(r), top: s.top - st.top + 40 };
+}
+function positionWires() {
+  const useRelay = $("useRelay").checked;
+  $("nRelay").classList.toggle("off", !useRelay);
+  $("seenRelayWrap").style.visibility = useRelay ? "visible" : "hidden";
+  const L = layout();
+  $("wireL").style.left = L.sx + "px";
+  $("wireR").style.left = L.mx + "px";
+  if (useRelay) {
+    $("wireL").style.width = (L.mx - L.sx) + "px";
+    $("wireR").style.left = L.mx + "px";
+    $("wireR").style.width = (L.rx - L.mx) + "px";
+    $("wireR").style.display = "block";
+  } else {
+    $("wireL").style.width = (L.rx - L.sx) + "px";
+    $("wireR").style.display = "none";
+  }
+}
+window.addEventListener("resize", positionWires);
+$("useRelay").addEventListener("change", positionWires);
+
+function movePacket(fromX, toX, ms) {
+  return new Promise((res) => {
+    packet.style.transition = "none";
+    packet.style.left = fromX + "px";
+    packet.style.opacity = "1";
+    requestAnimationFrame(() => {
+      packet.style.transition = `left ${ms}ms linear`;
+      packet.style.left = toX + "px";
+      setTimeout(res, ms);
+    });
+  });
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- ciphers / display helpers ----
+function schemeName(s) { return { none: "plaintext", caesar: "Caesar", vigenere: "Vigenere", pigpen: "Pigpen", modern: "Modern AES" }[s] || s; }
+function paramsFor(scheme) {
+  if (scheme === "caesar") return { shift: Math.max(1, Math.min(25, Number($("shift").value) || 3)) };
+  if (scheme === "vigenere") return { vkey: $("vkey").value };
+  return {};
+}
+
+// Pigpen: each letter is a symbol. A-I tic-tac-toe cells, J-R the same with a
+// dot, S-V the wedges of an X, W-Z the wedges with a dot.
+const PIG_BOX = [
+  ["right", "bottom"], ["left", "right", "bottom"], ["left", "bottom"],
+  ["top", "right", "bottom"], ["top", "right", "bottom", "left"], ["top", "left", "bottom"],
+  ["top", "right"], ["top", "left", "right"], ["top", "left"],
+];
+function pigSpec(L) {
+  const i = L.charCodeAt(0) - 65;
+  if (i < 0 || i > 25) return null;
+  if (i < 9) return { sides: PIG_BOX[i] };
+  if (i < 18) return { sides: PIG_BOX[i - 9], dot: true };
+  const w = ["top", "left", "right", "bottom"];
+  if (i < 22) return { wedge: w[i - 18] };
+  return { wedge: w[i - 22], dot: true };
+}
+function pigGlyph(L, size) {
+  const sp = pigSpec(L); if (!sp) return "";
+  const S = size, a = 4, b = S - 4, c = S / 2; let p = "";
+  if (sp.sides) {
+    const seg = { top: `M${a} ${a}H${b}`, bottom: `M${a} ${b}H${b}`, left: `M${a} ${a}V${b}`, right: `M${b} ${a}V${b}` };
+    sp.sides.forEach((s) => p += `<path d="${seg[s]}"/>`);
+  } else {
+    const wg = { top: `M${a} ${a}L${c} ${c}L${b} ${a}`, bottom: `M${a} ${b}L${c} ${c}L${b} ${b}`, left: `M${a} ${a}L${c} ${c}L${a} ${b}`, right: `M${b} ${a}L${c} ${c}L${b} ${b}` };
+    p += `<path d="${wg[sp.wedge]}"/>`;
+  }
+  if (sp.dot) p += `<circle cx="${c}" cy="${c}" r="2.4" fill="currentColor" stroke="none"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${S} ${S}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle">${p}</svg>`;
+}
+function pigpenRender(text, size) {
+  return `<span class="pigline">` + [...text.toUpperCase()].map((ch) => {
+    if (ch === " ") return `<span style="display:inline-block;width:${size * 0.45}px"></span>`;
+    return pigSpec(ch) ? pigGlyph(ch, size) : escapeHtml(ch);
+  }).join("") + `</span>`;
+}
+function wireHtml(text, scheme, size) { return scheme === "pigpen" ? pigpenRender(text, size || 24) : escapeHtml(text); }
+
+function setMiddleReadout(trace, scheme) {
+  const box = $("seenRelay").parentElement;
+  if (scheme === "none") { $("seenRelay").textContent = trace.relay_can_read; box.className = "seen leak"; }
+  else if (trace.strength === "modern") { $("seenRelay").textContent = trace.on_wire; box.className = "seen safe"; }
+  else { $("seenRelay").innerHTML = wireHtml(trace.on_wire, scheme, 22) + ' <span class="muted">(scrambled - crackable)</span>'; box.className = "seen warn"; }
+}
+
+async function send() {
+  if (busy) return;
+  busy = true;
+  $("sendBtn").disabled = true;
+  const useRelay = $("useRelay").checked;
+  const scheme = $("cipher").value;
+  const receiverIp = $("receiverIp").value.trim();
+  const relayIp = $("relayIp").value.trim();
+  const live = !!receiverIp;
+  $("modeChip").textContent = live ? "Live network" : "Simulation";
+
+  ["seenSender", "seenRelay", "seenReceiver"].forEach((i) => $(i).textContent = "-");
+  $("seenRelay").parentElement.className = "seen";
+  $("seenReceiver").parentElement.className = "seen";
+  $("trace").innerHTML = "";
+  [$("bSender"), $("bRelay"), $("bReceiver")].forEach((b) => b.classList.remove("active"));
+
+  let trace;
+  try {
+    const r = await api("/api/net/send", { method: "POST", body: {
+      message: $("msg").value, scheme, ...paramsFor(scheme),
+      simulate: !live, receiver: receiverIp, relay: useRelay ? relayIp : "",
+    }});
+    trace = r.trace;
+  } catch (err) {
+    toast("Send failed: " + err.message, 4000);
+    busy = false; $("sendBtn").disabled = false; return;
+  }
+
+  const strong = trace.strength === "modern";
+  const tag = trace.strength === "none" ? "plaintext" : strong ? "encrypted (AES)" : "classical cipher";
+
+  if (!$("showAnim").checked) {
+    $("seenSender").textContent = trace.sent;
+    if (useRelay) setMiddleReadout(trace, scheme);
+    $("seenReceiver").textContent = trace.receiver_reads;
+    $("seenReceiver").parentElement.className = "seen safe";
+    renderTrace(trace, useRelay);
+    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+    busy = false; $("sendBtn").disabled = false; return;
+  }
+
+  positionWires();
+  const L = layout();
+  packet.className = "packet" + (scheme !== "none" ? " enc" : "") + (strong ? " strong" : "");
+  packet.innerHTML = `<span class="tag">${tag}</span>${wireHtml(trace.on_wire, scheme, 22)}`;
+  $("seenSender").textContent = trace.sent;
+  $("bSender").classList.add("active");
+  await sleep(400);
+
+  if (useRelay) {
+    await movePacket(L.sx, L.mx, 1100);
+    $("bSender").classList.remove("active");
+    $("bRelay").classList.add("active");
+    setMiddleReadout(trace, scheme);
+    await sleep(1100);
+    await movePacket(L.mx, L.rx, 1100);
+    $("bRelay").classList.remove("active");
+  } else {
+    await movePacket(L.sx, L.rx, 1600);
+    $("bSender").classList.remove("active");
+  }
+
+  $("bReceiver").classList.add("active");
+  packet.style.opacity = "0";
+  $("seenReceiver").textContent = trace.receiver_reads;
+  $("seenReceiver").parentElement.className = "seen safe";
+  await sleep(300);
+  $("bReceiver").classList.remove("active");
+
+  renderTrace(trace, useRelay);
+  if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+  busy = false; $("sendBtn").disabled = false;
+}
+
+function renderTrace(t, useRelay) {
+  const strengthLabel = { none: "none - plaintext", classical: "classical - weak", modern: "modern - strong" }[t.strength];
+  const rows = [
+    ["Sender typed", escapeHtml(t.sent), ""],
+    ["Cipher", escapeHtml(t.scheme_label) + " (" + strengthLabel + ")", ""],
+    ["Travelling on the wire", wireHtml(t.on_wire, t.scheme, 20), t.strength === "modern" ? "safe" : t.strength === "classical" ? "warn" : ""],
+  ];
+  if (useRelay) {
+    let v, cls;
+    if (t.strength === "none") { v = escapeHtml(t.relay_can_read); cls = "leak"; }
+    else if (t.strength === "modern") { v = "nothing readable - only ciphertext"; cls = "safe"; }
+    else { v = "scrambled - but can be cracked"; cls = "warn"; }
+    rows.push(["Middle Pi could read", v, cls]);
+  }
+  rows.push(["Receiver reads", escapeHtml(t.receiver_reads), "safe"]);
+  $("trace").innerHTML = rows.map(([k, v, cls]) =>
+    `<div><span class="k">${k}</span><br><span class="${cls}">${v}</span></div>`).join("");
+}
+
+async function pollPeers(receiverIp, relayIp) {
+  try {
+    const inbox = await api("/api/net/peek", { method: "POST", body: { ip: receiverIp, kind: "inbox" } });
+    const m = inbox.messages && inbox.messages[0];
+    if (m) $("seenReceiver").textContent = m.plain != null ? m.plain : m.payload;
+  } catch (_) {}
+  if (relayIp) {
+    try {
+      const seen = await api("/api/net/peek", { method: "POST", body: { ip: relayIp, kind: "seen", as_middle: true } });
+      const m = seen.messages && seen.messages[0];
+      if (m) setMiddleReadout({ on_wire: m.payload, relay_can_read: m.payload, strength: m.strength }, m.scheme);
+    } catch (_) {}
+  }
+}
+
+async function testConns() {
+  const s = $("netStatus"); s.textContent = "Testing...";
+  const out = [];
+  for (const [label, id] of [["Receiver", "receiverIp"], ["Relay", "relayIp"]]) {
+    const ip = $(id).value.trim();
+    if (!ip) continue;
+    try {
+      const r = await api("/api/net/ping", { method: "POST", body: { ip } });
+      out.push(`${label} ${ip}: OK (${r.node.hostname})`);
+    } catch (err) {
+      out.push(`${label} ${ip}: unreachable`);
+    }
+  }
+  s.textContent = out.join("  |  ") || "Enter at least a receiver IP first.";
+}
+
+async function clearInboxes() {
+  const ips = ["127.0.0.1"];
+  for (const id of ["receiverIp", "relayIp"]) {
+    const ip = $(id).value.trim();
+    if (ip) ips.push(ip);
+  }
+  try {
+    const r = await api("/api/net/clear", { method: "POST", body: { ips } });
+    const done = Object.values(r.results).filter((v) => v === "cleared").length;
+    toast(`Cleared ${done} of ${ips.length} node${ips.length === 1 ? "" : "s"}`);
+  } catch (err) {
+    toast("Could not clear: " + err.message, 4000);
+  }
+}
+
+function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+$("sendBtn").onclick = send;
+$("testBtn").onclick = testConns;
+$("clearBtn").onclick = clearInboxes;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const pk = document.getElementById("pigKeyModal");
+    if (pk) { e.preventDefault(); pk.remove(); }
+    return;
+  }
+  if ($("senderMode").classList.contains("hidden")) return;   // only in sender view
+  if (e.target.tagName === "INPUT") { if (e.key === "Enter") send(); return; }
+  if (e.key === "Enter") send();
+  if (e.key.toLowerCase() === "m") { $("useRelay").checked = !$("useRelay").checked; positionWires(); }
+});
+
+// ---- cipher chooser: show the right settings ----
+function updateCipherUI() {
+  document.querySelectorAll(".cipher-param").forEach((el) => el.style.display = "none");
+  const id = { caesar: "paramCaesar", vigenere: "paramVigenere", pigpen: "paramPigpen", modern: "paramModern" }[$("cipher").value];
+  if (id) $(id).style.display = "";
+}
+$("cipher").addEventListener("change", updateCipherUI);
+updateCipherUI();
+
+// ---- pigpen key card ----
+function showPigKey() {
+  let m = document.getElementById("pigKeyModal");
+  if (m) { m.remove(); return; }
+  m = document.createElement("div");
+  m.id = "pigKeyModal";
+  m.className = "modal open";   // so common.js knows Esc should not leave the page
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.7);display:grid;place-items:center;z-index:60;padding:20px";
+  const cells = [...Array(26)].map((_, i) => {
+    const L = String.fromCharCode(65 + i);
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--accent-2)">${pigGlyph(L, 46)}<span style="font-weight:700;color:var(--text)">${L}</span></div>`;
+  }).join("");
+  m.innerHTML = `<div class="panel" style="max-width:660px;max-height:88vh;overflow:auto">
+    <h2 style="margin-top:0">Pigpen key</h2>
+    <p class="muted">Each letter is drawn as the lines around its box (or the wedge of an X), with a dot for the second half of the alphabet.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:16px;margin-top:8px">${cells}</div>
+    <button class="btn" style="margin-top:18px" onclick="document.getElementById('pigKeyModal').remove()">Close</button></div>`;
+  m.addEventListener("click", (e) => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+$("pigKeyBtn").onclick = showPigKey;
+
+// ---- crack button (middle screen) ----
+let crackPlain = null;
+function crack(btn, kind) {
+  const out = btn.nextElementSibling;
+  btn.disabled = true;
+  if (kind === "modern") {
+    out.style.color = "#9dffdf";
+    out.textContent = "No luck. Modern encryption needs the secret key, which never crossed the network - so the interceptor is stuck. That's the whole point.";
+    return;
+  }
+  out.textContent = "Decoded: " + (crackPlain != null ? crackPlain : "(couldn't decode)");
+}
+positionWires();
+setTimeout(positionWires, 100);
+
+// ---- animation toggle (sender only) ----
+$("showAnim").addEventListener("change", () => {
+  $("stage").style.display = $("showAnim").checked ? "" : "none";
+  try { localStorage.setItem("classpi-net-anim", $("showAnim").checked ? "1" : "0"); } catch (_) {}
+});
+try {
+  if (localStorage.getItem("classpi-net-anim") === "0") { $("showAnim").checked = false; $("stage").style.display = "none"; }
+} catch (_) {}
+
+// ---- role switching: this Pi's screen ----
+let monTimer = null;
+const ROLE_HINT = {
+  middle: "This screen shows every message routed through this Pi. Plaintext is readable outright; classical ciphers can be cracked here; modern encryption leaves you with useless gibberish.",
+  receiver: "This screen shows messages delivered to this Pi, decoded with the shared setup so they read normally.",
+};
+
+function middleView(m) {
+  const s = m.scheme || "none";
+  if (s === "none") {
+    return `<div><div class="chip" style="color:#ffb0b0;border-color:var(--bad)">intercepted plaintext</div>
+      <div style="font-size:5vmin;font-weight:800;color:#ffd6d6;margin-top:14px;word-break:break-word">${escapeHtml(m.payload)}</div></div>`;
+  }
+  if (s === "modern") {
+    return `<div><div class="chip safe" style="color:#9dffdf">encrypted - cannot read</div>
+      <div style="font-family:var(--mono);font-size:16px;color:#9dffdf;word-break:break-all;margin:14px 0">${escapeHtml(m.payload)}</div>
+      <button class="btn" onclick="crack(this,'modern')">Try to crack it</button>
+      <div class="crackout muted" style="margin-top:10px;font-size:17px"></div></div>`;
+  }
+  const wire = s === "pigpen" ? pigpenRender(m.payload, 34) : escapeHtml(m.payload);
+  const style = s === "pigpen" ? "margin-top:14px" : "font-size:4vmin;font-weight:800;margin-top:14px;word-break:break-word";
+  return `<div><div class="chip" style="color:#ffe4b0;border-color:var(--warn)">${schemeName(s)} - scrambled</div>
+    <div style="color:#ffe4b0;${style}">${wire}</div>
+    <button class="btn" style="margin-top:16px" onclick="crack(this,'classical')">Crack it</button>
+    <div class="crackout" style="margin-top:10px;font-size:3.4vmin;font-weight:800;color:#9dffdf"></div></div>`;
+}
+function receiverView(m) {
+  const text = m.plain != null ? m.plain : m.payload;
+  const label = (m.scheme || "none") === "none" ? "received (was plaintext)" : "decoded with the shared setup (" + schemeName(m.scheme) + ")";
+  return `<div><div class="chip">${label}</div>
+    <div style="font-size:6vmin;font-weight:800;color:#cffbe9;margin-top:14px;word-break:break-word">${escapeHtml(text)}</div></div>`;
+}
+function logLine(m, role) {
+  const t = new Date((m.at || 0) * 1000).toLocaleTimeString("en-GB");
+  let shown;
+  if (role === "middle") shown = m.scheme === "modern" ? "[encrypted]" : m.scheme === "pigpen" ? "[pigpen symbols]" : m.payload;
+  else shown = m.plain != null ? m.plain : m.payload;
+  return `<div style="font-family:var(--mono);font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)">
+    <span class="muted">${t} from ${escapeHtml(m.from || "?")}:</span> ${escapeHtml(shown)}</div>`;
+}
+
+let monSig = "";
+async function pollMonitor(role) {
+  const kind = role === "middle" ? "seen" : "inbox";
+  let data;
+  try {
+    data = await api("/api/net/peek", { method: "POST", body: { ip: "127.0.0.1", kind, as_middle: role === "middle" } });
+  } catch (err) {
+    $("monLive").textContent = "node offline";
+    return;
+  }
+  $("monLive").textContent = "listening";
+  const msgs = data.messages || [];
+  const latest = msgs[0];
+  crackPlain = latest ? latest.plain : null;
+  // Only redraw when something actually changed, so a revealed crack stays put.
+  const sig = JSON.stringify(msgs.map((m) => [m.at, m.scheme, m.payload]));
+  if (sig === monSig) return;
+  monSig = sig;
+  const box = $("monLatest");
+  if (!latest) box.innerHTML = '<div class="muted" style="font-size:22px">Waiting for a message...</div>';
+  else box.innerHTML = role === "middle" ? middleView(latest) : receiverView(latest);
+  $("monLog").innerHTML = msgs.slice(0, 8).map((m) => logLine(m, role)).join("");
+}
+
+async function setRole(role) {
+  document.querySelectorAll(".rolebar .btn").forEach((b) => b.classList.toggle("on", b.dataset.role === role));
+  try { localStorage.setItem("classpi-net-role", role); } catch (_) {}
+  clearInterval(monTimer); monTimer = null;
+  const monitor = role !== "sender";
+  $("senderMode").classList.toggle("hidden", monitor);
+  $("monitorMode").classList.toggle("hidden", !monitor);
+  $("animLbl").style.display = $("showAnim").parentElement.style.display = role === "sender" ? "" : "none";
+  if (!monitor) { $("modeChip").textContent = "Sender"; return; }
+  $("modeChip").textContent = role === "middle" ? "Middle screen" : "Receiver screen";
+  $("monRole").textContent = role === "middle" ? "MIDDLE (intercepting)" : "RECEIVER";
+  $("monHint").textContent = ROLE_HINT[role];
+  try { const w = await api("/api/net/ping", { method: "POST", body: { ip: "127.0.0.1" } }); $("monHost").textContent = w.node.hostname + " / " + w.node.ip; } catch (_) {}
+  monSig = "";   // force a fresh draw when the role changes
+  pollMonitor(role);
+  monTimer = setInterval(() => pollMonitor(role), 1000);
+}
+document.querySelectorAll(".rolebar .btn").forEach((b) => b.onclick = () => setRole(b.dataset.role));
+let startRole = "sender";
+try { startRole = localStorage.getItem("classpi-net-role") || "sender"; } catch (_) {}
+setRole(startRole);
+</script>
+</body>
+</html>
