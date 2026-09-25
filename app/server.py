@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "run_timeout_seconds": 5,
     "net_port": 8090,
     "net_key": "clyde-kelvin",
+    "repo_dir": "",
 }
 
 RUN_OUTPUT_LIMIT = 100_000  # characters
@@ -272,6 +273,69 @@ def system():
         uptime_seconds=int(uptime),
         python=sys.version.split()[0],
     )
+
+
+# ---------------------------------------------------------------- updates
+def _repo_dir():
+    """The git clone this Pi was installed from (recorded by install.sh)."""
+    d = str(CONFIG.get("repo_dir", "") or "").strip()
+    repo = Path(d) if d else None
+    return repo if repo and (repo / ".git").exists() else None
+
+
+def _git(repo, *args, timeout=30):
+    r = subprocess.run(["git", "-C", str(repo), *args],
+                       capture_output=True, text=True, timeout=timeout)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "git failed").strip())
+    return r.stdout.strip()
+
+
+NOT_A_CLONE = ("This Pi was not installed from the GitHub clone, so it cannot "
+               "update itself. See 'Updating a Pi' in the README.")
+
+
+@app.get("/api/system/update/check")
+def update_check():
+    repo = _repo_dir()
+    if not repo:
+        return jsonify(ok=False, error=NOT_A_CLONE), 400
+    try:
+        _git(repo, "fetch", "--quiet", "origin")
+        behind = int(_git(repo, "rev-list", "--count", "HEAD..@{u}"))
+        current = _git(repo, "log", "-1", "--format=%h %s", "HEAD")
+        latest = _git(repo, "log", "-1", "--format=%h %s", "@{u}")
+    except subprocess.TimeoutExpired:
+        return jsonify(ok=False, error="Timed out talking to GitHub - check the internet connection."), 502
+    except (OSError, RuntimeError, ValueError) as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    return jsonify(ok=True, behind=behind, current=current, latest=latest)
+
+
+@app.post("/api/system/update")
+def update_apply():
+    payload = request.get_json(silent=True) or {}
+    pin = str(payload.get("pin", ""))
+    if not hmac.compare_digest(pin, str(CONFIG["teacher_pin"])):
+        time.sleep(1)
+        return jsonify(ok=False, error="Wrong PIN"), 403
+    repo = _repo_dir()
+    if not repo:
+        return jsonify(ok=False, error=NOT_A_CLONE), 400
+    try:
+        _git(repo, "pull", "--ff-only", timeout=60)
+    except subprocess.TimeoutExpired:
+        return jsonify(ok=False, error="Timed out pulling from GitHub."), 502
+    except (OSError, RuntimeError) as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    # Root-side half (copy into /opt, restart services) - async so this
+    # response gets out before the server restarts itself.
+    try:
+        subprocess.Popen(["sudo", "-n", "/usr/local/sbin/classpi-apply-update"],
+                         start_new_session=True)
+    except OSError as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    return jsonify(ok=True)
 
 
 ACTIONS = {

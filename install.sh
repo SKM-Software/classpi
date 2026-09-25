@@ -69,7 +69,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || die "Could not update the package list - check the internet connection."
 # cage = minimal Wayland kiosk compositor; seatd lets it run without a full desktop.
 apt-get install -y --no-install-recommends \
-  python3 python3-venv python3-pip curl \
+  python3 python3-venv python3-pip curl git \
   cage seatd plymouth plymouth-themes fonts-dejavu \
   || die "Package install failed - see the messages above."
 # Chromium is called 'chromium' on Trixie and newer, 'chromium-browser' on older Bookworm images.
@@ -106,7 +106,8 @@ cat > "$CONFIG_FILE" <<JSON
   "port": 8080,
   "net_port": $NET_PORT,
   "work_dir": "$(json_escape "$WORK_DIR")",
-  "run_timeout_seconds": $RUN_TIMEOUT
+  "run_timeout_seconds": $RUN_TIMEOUT,
+  "repo_dir": "$(json_escape "$SRC_DIR")"
 }
 JSON
 # The services run as $TARGET_USER, so they must be able to read this file;
@@ -126,9 +127,21 @@ if [[ "$(hostname)" != "$NEW_HOST" ]]; then
   hostnamectl set-hostname "$NEW_HOST" 2>/dev/null || true
 fi
 
-# allow the app to run only these exact power/kiosk commands without a password
+# Root-side half of the in-app updater: copy the already-pulled files into
+# place and restart the services. Kept root-owned in /usr/local/sbin so the
+# passwordless sudo entry below cannot be repointed at user-editable code.
+cat > /usr/local/sbin/classpi-apply-update <<APPLY
+#!/usr/bin/env bash
+set -euo pipefail
+cp -r "$SRC_DIR/app/." "$INSTALL_DIR/"
+"$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+systemctl restart classpi classpi-net
+APPLY
+chmod 755 /usr/local/sbin/classpi-apply-update
+
+# allow the app to run only these exact power/kiosk/update commands without a password
 cat > /etc/sudoers.d/classpi <<SUDO
-$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service
+$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service, /usr/local/sbin/classpi-apply-update
 SUDO
 chmod 440 /etc/sudoers.d/classpi
 

@@ -33,6 +33,15 @@
   <div class="grid" id="stats"></div>
 
   <div class="panel" style="margin-top:22px">
+    <h2 style="margin-top:0">Software update <span class="chip">teacher PIN to install</span></h2>
+    <p class="muted" id="updStatus">Checks the SKM-Software GitHub repository for a newer version of ClassPi.</p>
+    <div class="power">
+      <button class="btn" id="updCheck">Check for updates</button>
+      <button class="btn primary" id="updGo" disabled>Install update</button>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:22px">
     <h2 style="margin-top:0">Power &amp; kiosk <span class="chip">teacher PIN</span></h2>
     <p class="muted">These need the teacher PIN set during installation.</p>
     <div class="power">
@@ -103,6 +112,7 @@ function closePin() { $("pinModal").classList.remove("open"); pending = null; }
 async function confirmPin() {
   if (!pending) return;
   const pin = $("pin").value;
+  if (pending === "update") { return confirmUpdate(pin); }
   const labels = { reboot: "Restarting...", shutdown: "Shutting down...", exit_kiosk: "Exiting kiosk..." };
   try {
     await api("/api/system/action", { method: "POST", body: { pin, action: pending } });
@@ -114,6 +124,52 @@ async function confirmPin() {
     $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : "Could not do that: " + err.message;
     $("pin").value = ""; $("pin").focus();
   }
+}
+
+// ---- software update ----
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+$("updCheck").onclick = async () => {
+  const s = $("updStatus");
+  s.textContent = "Checking...";
+  $("updGo").disabled = true;
+  try {
+    const r = await api("/api/system/update/check");
+    if (r.behind > 0) {
+      s.textContent = `Update available: ${r.latest} (${r.behind} change${r.behind === 1 ? "" : "s"} behind). ` +
+                      `Currently on ${r.current}.`;
+      $("updGo").disabled = false;
+    } else {
+      s.textContent = `Up to date - running ${r.current}.`;
+    }
+  } catch (err) {
+    s.textContent = "Could not check: " + err.message;
+  }
+};
+
+$("updGo").onclick = () => askPin("update", "Install the update now?");
+
+async function confirmUpdate(pin) {
+  $("pinErr").style.color = "var(--muted)";
+  $("pinErr").textContent = "Updating...";
+  try {
+    await api("/api/system/update", { method: "POST", body: { pin } });
+  } catch (err) {
+    $("pinErr").style.color = "var(--bad)";
+    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : "Update failed: " + err.message;
+    $("pin").value = ""; $("pin").focus();
+    return;
+  }
+  closePin();
+  $("updGo").disabled = true;
+  const s = $("updStatus");
+  s.textContent = "Installing - the app restarts itself, then this page reloads...";
+  await sleep(12000);                    // let the copy + service restart happen
+  for (let i = 0; i < 30; i++) {         // then wait for the server to come back
+    try { await api("/api/info"); location.reload(); return; }
+    catch (_) { await sleep(2000); }
+  }
+  s.textContent = "The server has not come back yet - check it over SSH (journalctl -u classpi -e).";
 }
 
 document.querySelectorAll("[data-action]").forEach((b) => b.onclick = () => {

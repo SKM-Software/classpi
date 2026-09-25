@@ -20,7 +20,7 @@ too.
 | **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
-| **System** | Live Pi health (temp, memory, disk, load, IP) and PIN-protected restart / shutdown / exit-to-console. |
+| **System** | Live Pi health (temp, memory, disk, load, IP), one-click updates from GitHub, and PIN-protected restart / shutdown / exit-to-console. |
 
 Everything works with **arrow keys + Enter** and number-key shortcuts, and
 **Esc** always returns to the home screen.
@@ -80,8 +80,12 @@ The Pi now boots to the ClassPi launcher automatically. That's it.
 
 ## Updating a Pi after pushing changes
 
-If the Pi was set up from the GitHub clone, updating is one command, run from
-the repo folder on the Pi (over SSH, since the kiosk owns the screen):
+**Easiest: on the Pi itself.** Open **System → Software update**, press
+*Check for updates*, then *Install update* (teacher PIN). The Pi pulls the
+latest code from GitHub, applies it and the screen reloads — no SSH needed.
+(This needs the Pi to have been set up from the GitHub clone.)
+
+**Or over SSH**, from the repo folder on the Pi:
 
 ```bash
 cd ~/classpi
