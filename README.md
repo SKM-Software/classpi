@@ -2,9 +2,9 @@
 
 A custom, SKM Software-branded Raspberry Pi setup for the Computing Science
 classroom. Flash a stock Raspberry Pi OS Lite image, run one script, and the
-Pi boots straight into a Linux-desktop-style launcher — wallpaper, taskbar and
-clock, with the teaching tools in a start-style menu — and nothing else. No
-distractions.
+Pi boots straight into a Linux-desktop-style launcher — wallpaper, a top panel
+with the clock, and the teaching tools organised into a categorised SKM menu
+(Programming, Networking, Revision...) — and nothing else. No distractions.
 
 Built for a **Pi 5** with an **HDMI monitor + keyboard**, but it runs on a Pi 4
 too.

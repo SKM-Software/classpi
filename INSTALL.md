@@ -119,15 +119,18 @@ sudo reboot
 
 ## Step 5 — First look
 
-The Pi boots through the SKM Software splash into the ClassPi desktop: a
-taskbar with the **SKM Menu** button, the clock, and the tools in the menu.
+The Pi boots through the SKM Software splash into the ClassPi desktop: a top
+panel with the **SKM Menu** button and clock, and the tools organised into
+menu categories (Programming, Data, Networking, Revision, Classroom, System).
 
 Keyboard essentials (they're also shown on screen):
 
 | Key | Does |
 |---|---|
-| **1–7** | Open a tool directly |
-| **↑ ↓ + Enter** | Navigate the menu |
+| **1–7** | Open a tool directly, from anywhere |
+| **↑ ↓** | Move through the menu |
+| **→ / Enter** | Open a category's submenu; Enter on a tool launches it |
+| **←** | Back out of a submenu |
 | **Esc** | Open/close the menu; inside a tool, return to the desktop |
 | **Ctrl+Alt+F2** | Emergency terminal (log in; **Ctrl+Alt+F1** returns to ClassPi) |
 
