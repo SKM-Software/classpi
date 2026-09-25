@@ -30,6 +30,9 @@ Everything works with **arrow keys + Enter** and number-key shortcuts, and
 
 ## Installing it
 
+> **New to this?** [INSTALL.md](INSTALL.md) is the full step-by-step guide —
+> every click and command, plus troubleshooting. The short version follows.
+
 **1. Flash the base image.** Use Raspberry Pi Imager to write **Raspberry Pi OS
 Lite (64-bit)** to your SD card / SSD. In the Imager settings, set your Wi-Fi
 (if not using ethernet) and enable SSH — that's the easiest way to run the
@@ -201,6 +204,7 @@ classpi/
 ├── update.sh               pull latest from git and apply
 ├── uninstall.sh            removal / restore
 ├── README.md               this file
+├── INSTALL.md              step-by-step install guide
 ├── branding/
 │   ├── make_splash.py      regenerates the boot splash
 │   └── splash.png          boot splash image
