@@ -70,10 +70,23 @@
   .trace .safe { color: #9dffdf; }
   details.note { margin-top: 16px; color: var(--muted); font-size: 15px; }
   summary { cursor: pointer; }
+
+  /* Settings button floating over the app, and the panel it opens. */
+  #infoBtn {
+    position: fixed; top: 14px; right: 16px; z-index: 20;
+    width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    background: rgba(12, 18, 30, .55); color: #fff; border: 1px solid rgba(255,255,255,.45);
+    font-family: Georgia, serif; font-style: italic; font-size: 20px; font-weight: 700;
+    backdrop-filter: blur(4px);
+  }
+  #infoBtn:hover, #infoBtn:focus-visible { background: rgba(12,18,30,.8); outline: none; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 60; padding: 20px; }
+  .modal.open { display: grid; }
+  #infoCard { width: min(620px, 96vw); max-height: 90vh; overflow: auto; }
 </style>
 </head>
 <body>
-<div class="topbar">
+<div class="topbar" id="chrome">
   <a class="home-btn" href="/">&larr; Home <span class="kbd">Esc</span></a>
   <h1>Network Lab</h1>
   <span class="chip">Higher: encryption &amp; network security</span>
@@ -81,19 +94,7 @@
   <span id="modeChip" class="chip">Simulation</span>
 </div>
 
-<div class="rolebar" style="display:flex;gap:10px;align-items:center;padding:14px 28px 0;flex-wrap:wrap;max-width:1500px;margin:0 auto">
-  <span class="muted">This Pi's screen:</span>
-  <button class="btn on" data-role="sender">Sender / control</button>
-  <button class="btn" data-role="middle">Middle (spy) screen</button>
-  <button class="btn" data-role="receiver">Receiver screen</button>
-  <span style="flex:1"></span>
-  <label class="switch" title="Show the animated diagram (sender only)" style="display:inline-flex;align-items:center;gap:8px">
-    <input type="checkbox" id="showAnim" checked><span class="track"></span>
-  </label>
-  <span class="muted" id="animLbl">Show animation</span>
-</div>
-
-<div class="page">
+<div class="page" id="pageWrap">
   <section id="senderMode">
   <div class="lab">
     <div class="panel stage" id="stage">
@@ -126,75 +127,12 @@
     </div>
 
     <div class="panel">
-      <div class="row">
-        <label for="theme">App</label>
-        <select id="theme" style="flex:1"></select>
-      </div>
       <div class="row" id="rowMsg">
         <label for="msg">Message</label>
-        <input type="text" id="msg" value="Meet me at the gates at 3pm" maxlength="200">
-      </div>
-      <div id="themeFields"></div>
-      <div class="row">
-        <label class="switch" title="Add a middle Pi">
-          <input type="checkbox" id="useRelay"><span class="track"></span>
-        </label>
-        <span>Put a Pi in the middle</span>
-      </div>
-      <div class="row">
-        <label for="cipher">Encryption</label>
-        <select id="cipher" style="flex:1">
-          <option value="none">None - plaintext</option>
-          <option value="caesar">Caesar shift (classical)</option>
-          <option value="vigenere">Vigenere cipher (classical)</option>
-          <option value="pigpen">Pigpen cipher (classical)</option>
-          <option value="modern">Modern encryption - AES (strong)</option>
-        </select>
-      </div>
-      <div class="row cipher-param" id="paramCaesar" style="display:none">
-        <label for="shift">Shift by</label>
-        <input type="number" id="shift" value="3" min="1" max="25" style="width:80px">
-        <span class="muted" style="font-size:14px">letters (1-25)</span>
-      </div>
-      <div class="row cipher-param" id="paramVigenere" style="display:none">
-        <label for="vkey">Keyword</label>
-        <input type="text" id="vkey" value="SCHOOL" maxlength="20" autocomplete="off">
-      </div>
-      <div class="row cipher-param" id="paramPigpen" style="display:none">
-        <span class="muted" style="font-size:14px;flex:1">Letters become symbols. No secret key - anyone with the key card can read it.</span>
-        <button type="button" class="btn" id="pigKeyBtn">Show key</button>
-      </div>
-      <div class="row cipher-param" id="paramModern" style="display:none">
-        <span class="muted" style="font-size:14px">Uses the shared key set when ClassPi was installed. The key never travels with the message.</span>
+        <input type="text" id="msg" maxlength="200" placeholder="Type a message to send">
       </div>
       <button class="btn primary" id="sendBtn" style="width:100%; font-size:20px; padding:14px">&#9654; Send message</button>
-
-      <div id="themePreviewWrap" style="margin-top:16px;display:none">
-        <div class="muted" style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">What it looks like in the app</div>
-        <div id="themePreview"></div>
-      </div>
-
-      <div class="trace" id="trace" style="margin-top:18px"></div>
-
-      <details style="margin-top:14px">
-        <summary class="muted">Connect real Pis</summary>
-        <div class="row" style="margin-top:12px"><label>Receiver IP</label><input type="text" id="receiverIp" placeholder="e.g. 192.168.1.42"></div>
-        <div class="row"><label>Relay IP</label><input type="text" id="relayIp" placeholder="e.g. 192.168.1.43"></div>
-        <div class="row">
-          <button class="btn" id="testBtn">Test connections</button>
-          <button class="btn" id="clearBtn">Clear inboxes</button>
-        </div>
-        <p class="muted" id="netStatus" style="font-size:14px"></p>
-      </details>
-
-      <details class="note">
-        <summary>Teaching notes</summary>
-        <p><b>Plaintext:</b> anyone in the middle reads it. <b>Classical ciphers</b> (Caesar, Vigenere, Pigpen) scramble the text, but the middle can still crack them - the "Crack it" button on the middle screen shows how (brute-forcing 25 Caesar shifts, or reading pigpen off the key card). This is why they are not used for real security. <b>Modern encryption (AES)</b> needs a secret key that never travels, so the middle is stuck with gibberish.</p>
-        <p>A nice point for pupils (Kerckhoffs's principle): the algorithm can be public knowledge - what keeps a message safe is the secrecy of the <i>key</i>, not the method.</p>
-        <p><b>The App chooser</b> skins the sender and receiver to look like apps pupils actually use. The middle screen is deliberately never skinned: the friendly interface is only skin deep, and the network sees the same bytes either way.</p>
-        <p>Try the <b>Card payment</b> app with a Caesar shift. Classical ciphers only move letters A-Z, so the card number, expiry and security code travel across the wire completely unscrambled - the sharpest demonstration in this app of why classical ciphers are useless for real data. (The card details here are fake; never type a real card number.)</p>
-        <p>The middle Pi here is an honest relay you route through on purpose, so the whole demo runs safely on your own kit. Real attacks (e.g. ARP spoofing) force traffic through an attacker without consent - worth naming for pupils, but not something to run on a live network.</p>
-      </details>
+      <div id="classicSlot"></div>
     </div>
   </div>
   </section>
@@ -217,6 +155,97 @@
       <div id="monLog" style="text-align:left;max-width:720px;margin:0 auto"></div>
     </div>
   </section>
+</div>
+
+<!-- Full-screen app view (sender or receiver, whenever an app theme is on). -->
+<div id="appView" class="hidden"><div id="appRoot"></div></div>
+
+<!-- Settings live here in app/monitor mode, and move inline for Classic. -->
+<button id="infoBtn" class="hidden" title="Settings (i)" aria-label="Settings">i</button>
+
+<div class="modal" id="infoPanel">
+  <div class="panel" id="infoCard">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <h2 style="margin:0;flex:1">Network Lab settings</h2>
+      <button class="btn" id="infoClose">Close <span class="kbd">Esc</span></button>
+    </div>
+    <div id="infoBody"></div>
+  </div>
+</div>
+
+<!-- One settings block, moved between #classicSlot and #infoBody. Keeping a
+     single copy means every handler stays bound wherever it is shown. -->
+<div id="settings">
+  <div class="row" style="margin-top:6px">
+    <label>This screen</label>
+    <button class="btn on" data-role="sender">Sender</button>
+    <button class="btn" data-role="middle">Middle (spy)</button>
+    <button class="btn" data-role="receiver">Receiver</button>
+  </div>
+  <div class="row">
+    <label for="theme">App</label>
+    <select id="theme" style="flex:1"></select>
+  </div>
+  <div class="row">
+    <label for="cipher">Encryption</label>
+    <select id="cipher" style="flex:1">
+      <option value="none">None - plaintext</option>
+      <option value="caesar">Caesar shift (classical)</option>
+      <option value="vigenere">Vigenere cipher (classical)</option>
+      <option value="pigpen">Pigpen cipher (classical)</option>
+      <option value="modern">Modern encryption - AES (strong)</option>
+    </select>
+  </div>
+  <div class="row cipher-param" id="paramCaesar" style="display:none">
+    <label for="shift">Shift by</label>
+    <input type="number" id="shift" value="3" min="1" max="25" style="width:80px">
+    <span class="muted" style="font-size:14px">letters (1-25)</span>
+  </div>
+  <div class="row cipher-param" id="paramVigenere" style="display:none">
+    <label for="vkey">Keyword</label>
+    <input type="text" id="vkey" value="SCHOOL" maxlength="20" autocomplete="off">
+  </div>
+  <div class="row cipher-param" id="paramPigpen" style="display:none">
+    <span class="muted" style="font-size:14px;flex:1">Letters become symbols. No secret key - anyone with the key card can read it.</span>
+    <button type="button" class="btn" id="pigKeyBtn">Show key</button>
+  </div>
+  <div class="row cipher-param" id="paramModern" style="display:none">
+    <span class="muted" style="font-size:14px">Uses the shared key set when ClassPi was installed. The key never travels with the message.</span>
+  </div>
+  <div class="row">
+    <label class="switch" title="Add a middle Pi">
+      <input type="checkbox" id="useRelay"><span class="track"></span>
+    </label>
+    <span>Put a Pi in the middle</span>
+  </div>
+  <div class="row" id="animRow">
+    <label class="switch" title="Show the animated diagram (Classic only)">
+      <input type="checkbox" id="showAnim" checked><span class="track"></span>
+    </label>
+    <span>Show animation</span>
+  </div>
+
+  <div class="trace" id="trace" style="margin-top:14px"></div>
+
+  <details style="margin-top:14px">
+    <summary class="muted">Connect real Pis</summary>
+    <div class="row" style="margin-top:12px"><label>Receiver IP</label><input type="text" id="receiverIp" placeholder="e.g. 192.168.1.42"></div>
+    <div class="row"><label>Relay IP</label><input type="text" id="relayIp" placeholder="e.g. 192.168.1.43"></div>
+    <div class="row">
+      <button class="btn" id="testBtn">Test connections</button>
+      <button class="btn" id="clearBtn">Clear inboxes</button>
+    </div>
+    <p class="muted" id="netStatus" style="font-size:14px"></p>
+  </details>
+
+  <details class="note">
+    <summary>Teaching notes</summary>
+    <p><b>Plaintext:</b> anyone in the middle reads it. <b>Classical ciphers</b> (Caesar, Vigenere, Pigpen) scramble the text, but the middle can still crack them - the "Crack it" button on the middle screen shows how (brute-forcing 25 Caesar shifts, or reading pigpen off the key card). This is why they are not used for real security. <b>Modern encryption (AES)</b> needs a secret key that never travels, so the middle is stuck with gibberish.</p>
+    <p>A nice point for pupils (Kerckhoffs's principle): the algorithm can be public knowledge - what keeps a message safe is the secrecy of the <i>key</i>, not the method.</p>
+    <p><b>The App chooser</b> turns this screen into a working pastiche of an app pupils use - you type in its own message box and press its own send button. The middle screen is deliberately never skinned: the friendly interface is only skin deep, and the network sees the same bytes either way.</p>
+    <p>Try the <b>Card payment</b> app with a Caesar shift. Classical ciphers only move letters A-Z, so the card number, expiry and security code travel across the wire completely unscrambled - the sharpest demonstration in this app of why classical ciphers are useless for real data. (Use the fake demo details; never type a real card number.)</p>
+    <p>The middle Pi here is an honest relay you route through on purpose, so the whole demo runs safely on your own kit. Real attacks (e.g. ARP spoofing) force traffic through an attacker without consent - worth naming for pupils, but not something to run on a live network.</p>
+  </details>
 </div>
 
 <script src="/js/common.js"></script>
@@ -327,8 +356,11 @@ function setMiddleReadout(trace, scheme) {
 
 async function send() {
   if (busy) return;
+  const values = composeValues();
+  if (!values.join("").trim()) { toast("Type something to send first"); return; }
   busy = true;
   $("sendBtn").disabled = true;
+  const inApp = isApp() && role === "sender";
   const useRelay = $("useRelay").checked;
   const scheme = $("cipher").value;
   const receiverIp = $("receiverIp").value.trim();
@@ -345,7 +377,7 @@ async function send() {
   let trace;
   try {
     const r = await api("/api/net/send", { method: "POST", body: {
-      message: composeText(), scheme, theme: themeId(), ...paramsFor(scheme),
+      message: NetThemes.join(values), scheme, theme: themeId(), ...paramsFor(scheme),
       simulate: !live, receiver: receiverIp, relay: useRelay ? relayIp : "",
     }});
     trace = r.trace;
@@ -356,6 +388,17 @@ async function send() {
 
   const strong = trace.strength === "modern";
   const tag = trace.strength === "none" ? "plaintext" : strong ? "encrypted (AES)" : "classical cipher";
+
+  // In an app the message lands in the app's own thread; the wire diagram
+  // belongs to the Classic view, which is not on screen.
+  if (inApp) {
+    NetThemes.noteSent($("appRoot"), themeId(), values);
+    NetThemes.clearFields($("appRoot"), themeId());
+    renderTrace(trace, useRelay);
+    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+    busy = false; $("sendBtn").disabled = false;
+    return;
+  }
 
   if (!$("showAnim").checked) {
     $("seenSender").textContent = NetThemes.showJoined(trace.sent);
@@ -473,10 +516,14 @@ $("clearBtn").onclick = clearInboxes;
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     const pk = document.getElementById("pigKeyModal");
-    if (pk) { e.preventDefault(); pk.remove(); }
+    if (pk) { e.preventDefault(); pk.remove(); return; }
+    if ($("infoPanel").classList.contains("open")) { e.preventDefault(); setInfo(false); }
     return;
   }
-  if ($("senderMode").classList.contains("hidden")) return;   // only in sender view
+  if (e.key === "i" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !$("infoBtn").classList.contains("hidden")) {
+    e.preventDefault(); setInfo(true); return;
+  }
+  if ($("senderMode").classList.contains("hidden")) return;   // only in the Classic view
   if (e.target.tagName === "INPUT") { if (e.key === "Enter") send(); return; }
   if (e.key === "Enter") send();
   if (e.key.toLowerCase() === "m") { $("useRelay").checked = !$("useRelay").checked; positionWires(); }
@@ -491,7 +538,9 @@ function updateCipherUI() {
 $("cipher").addEventListener("change", updateCipherUI);
 updateCipherUI();
 
-// ---- app theme: build the choosers, swap the compose fields ----
+// ---- app theme + view switching ----
+// Three layouts: the Classic control view, a full-screen app (sender or
+// receiver), and the raw monitor used by the middle screen.
 NetThemes.list.forEach((t) => {
   $("theme").add(new Option(t.label, t.id));
   $("monTheme").add(new Option(t.label, t.id));
@@ -499,55 +548,59 @@ NetThemes.list.forEach((t) => {
 $("monTheme").add(new Option("Auto - match sender", "auto"), 0);
 $("monTheme").value = "auto";
 
-// Build the multi-field compose rows for every theme that needs them.
-NetThemes.list.forEach(({ id }) => {
-  const def = NetThemes.get(id);
-  if (!def.fields) return;
-  const wrap = document.createElement("div");
-  wrap.className = "theme-field";
-  wrap.id = "fields-" + id;
-  wrap.style.display = "none";
-  wrap.innerHTML = def.fields.map((f) =>
-    `<div class="row"><label for="tf-${id}-${f.id}">${f.label}</label>
-     <input type="text" id="tf-${id}-${f.id}" maxlength="${f.max}" autocomplete="off" value="${NetThemes.esc(f.value)}"></div>`
-  ).join("") + (def.warn ? `<div class="row"><span class="muted" style="font-size:14px;color:var(--warn)">${def.warn}</span></div>` : "");
-  $("themeFields").appendChild(wrap);
-});
-
+let role = "sender";
 function themeId() { return $("theme").value; }
-function themeFieldEls(id) {
-  const def = NetThemes.get(id);
-  return def.fields ? def.fields.map((f) => $(`tf-${id}-${f.id}`)) : [];
-}
+function isApp() { return themeId() !== "classic"; }
 function composeValues() {
-  const id = themeId();
-  const els = themeFieldEls(id);
-  return els.length ? els.map((el) => el.value) : [$("msg").value];
+  return (isApp() && role === "sender") ? NetThemes.readFields($("appRoot")) : [$("msg").value];
 }
 function composeText() { return NetThemes.join(composeValues()); }
 
-function updateThemeUI() {
-  const id = themeId();
-  const def = NetThemes.get(id);
-  document.querySelectorAll(".theme-field").forEach((el) => el.style.display = "none");
-  $("rowMsg").style.display = def.fields ? "none" : "";
-  if (def.fields) $("fields-" + id).style.display = "";
-  $("themePreviewWrap").style.display = id === "classic" ? "none" : "";
-  try { localStorage.setItem("classpi-net-theme", id); } catch (_) {}
-  drawPreview();
+// Settings are a single block that moves, so every handler stays bound.
+function placeSettings(inline) {
+  const host = inline ? $("classicSlot") : $("infoBody");
+  if ($("settings").parentElement !== host) host.appendChild($("settings"));
 }
-function drawPreview() {
-  const def = NetThemes.get(themeId());
-  if (themeId() === "classic") return;
-  $("themePreview").innerHTML = def.renderPreview(composeValues());
+
+function applyView() {
+  const app = isApp();
+  const showApp = app && (role === "sender" || role === "receiver");
+  const showClassic = !app && role === "sender";
+  const showMon = !showApp && !showClassic;      // middle, or receiver on Classic
+
+  $("chrome").classList.toggle("hidden", showApp);
+  $("pageWrap").classList.toggle("hidden", showApp);
+  $("appView").classList.toggle("hidden", !showApp);
+  $("senderMode").classList.toggle("hidden", !showClassic);
+  $("monitorMode").classList.toggle("hidden", !showMon);
+  // Classic keeps its controls inline; the app hides them behind the i button.
+  $("infoBtn").classList.toggle("hidden", showClassic);
+  placeSettings(showClassic);
+  $("animRow").style.display = showClassic ? "" : "none";
+  $("monThemeWrap").style.display = role === "receiver" ? "inline-flex" : "none";
+  document.querySelectorAll("#settings [data-role]").forEach((b) => b.classList.toggle("on", b.dataset.role === role));
+
+  if (showApp && role === "sender") NetThemes.mountSender($("appRoot"), themeId(), send);
+  if (showClassic) { positionWires(); setTimeout(positionWires, 60); }
+  monSig = "";   // force the monitor/receiver to redraw into its new home
+}
+
+function updateThemeUI() {
+  try { localStorage.setItem("classpi-net-theme", themeId()); } catch (_) {}
+  applyView();
 }
 $("theme").addEventListener("change", updateThemeUI);
-document.addEventListener("input", (e) => {
-  if (e.target.id === "msg" || /^tf-/.test(e.target.id)) drawPreview();
-});
 try { $("theme").value = localStorage.getItem("classpi-net-theme") || "classic"; } catch (_) {}
 if (!NetThemes.defs[$("theme").value]) $("theme").value = "classic";
-updateThemeUI();
+
+// ---- settings panel ----
+function setInfo(open) {
+  $("infoPanel").classList.toggle("open", open);
+  if (open) $("infoClose").focus();
+}
+$("infoBtn").onclick = () => setInfo(true);
+$("infoClose").onclick = () => setInfo(false);
+$("infoPanel").addEventListener("click", (e) => { if (e.target === $("infoPanel")) setInfo(false); });
 
 // ---- pigpen key card ----
 function showPigKey() {
@@ -634,7 +687,7 @@ function logLine(m, role) {
 }
 
 let monSig = "";
-async function pollMonitor(role) {
+async function pollMonitor() {
   const kind = role === "middle" ? "seen" : "inbox";
   let data;
   try {
@@ -655,33 +708,40 @@ async function pollMonitor(role) {
   const sig = JSON.stringify(msgs.map((m) => [m.at, m.scheme, m.payload, m.theme])) + "|" + effTheme;
   if (sig === monSig) return;
   monSig = sig;
+
+  // A themed receiver draws into the full-screen app; everything else uses
+  // the raw monitor panel.
+  if (role === "receiver" && effTheme !== "classic") {
+    $("appView").classList.remove("hidden");
+    $("chrome").classList.add("hidden");
+    $("pageWrap").classList.add("hidden");
+    $("appRoot").innerHTML = latest
+      ? NetThemes.renderReceiver(effTheme, msgs)
+      : `<div class="nt-app" style="background:#111826;color:#fff"><div class="nt-app-body" style="align-items:center;justify-content:center">
+           <div style="text-align:center;opacity:.75">Waiting for a message...</div></div></div>`;
+    return;
+  }
   const box = $("monLatest");
   if (!latest) box.innerHTML = '<div class="muted" style="font-size:22px">Waiting for a message...</div>';
   else box.innerHTML = role === "middle" ? middleView(latest) : receiverView(msgs, effTheme);
   $("monLog").innerHTML = msgs.slice(0, 8).map((m) => logLine(m, role)).join("");
 }
 
-async function setRole(role) {
-  document.querySelectorAll(".rolebar .btn").forEach((b) => b.classList.toggle("on", b.dataset.role === role));
+async function setRole(r) {
+  role = r;
   try { localStorage.setItem("classpi-net-role", role); } catch (_) {}
   clearInterval(monTimer); monTimer = null;
-  const monitor = role !== "sender";
-  $("senderMode").classList.toggle("hidden", monitor);
-  $("monitorMode").classList.toggle("hidden", !monitor);
-  $("animLbl").style.display = $("showAnim").parentElement.style.display = role === "sender" ? "" : "none";
-  if (!monitor) { $("modeChip").textContent = "Sender"; return; }
+  applyView();
+  if (role === "sender") { $("modeChip").textContent = "Sender"; return; }
   $("modeChip").textContent = role === "middle" ? "Middle screen" : "Receiver screen";
   $("monRole").textContent = role === "middle" ? "MIDDLE (intercepting)" : "RECEIVER";
-  // The middle screen is never themed - that is the teaching point.
-  $("monThemeWrap").style.display = role === "receiver" ? "inline-flex" : "none";
   $("monHint").textContent = ROLE_HINT[role];
   try { const w = await api("/api/net/ping", { method: "POST", body: { ip: "127.0.0.1" } }); $("monHost").textContent = w.node.hostname + " / " + w.node.ip; } catch (_) {}
-  monSig = "";   // force a fresh draw when the role changes
-  pollMonitor(role);
-  monTimer = setInterval(() => pollMonitor(role), 1000);
+  pollMonitor();
+  monTimer = setInterval(pollMonitor, 1000);
 }
 $("monTheme").addEventListener("change", () => { monSig = ""; });
-document.querySelectorAll(".rolebar .btn").forEach((b) => b.onclick = () => setRole(b.dataset.role));
+document.querySelectorAll("#settings [data-role]").forEach((b) => b.onclick = () => { setRole(b.dataset.role); setInfo(false); });
 let startRole = "sender";
 try { startRole = localStorage.getItem("classpi-net-role") || "sender"; } catch (_) {}
 setRole(startRole);

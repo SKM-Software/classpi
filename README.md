@@ -161,16 +161,19 @@ same button explains it can't be broken without the secret key.
 
 ### Making it look like a real app
 
-The sender has an **App** chooser that skins both the sender preview and the
-receiver screen to look like software pupils actually use:
+Pick an **App** and the whole screen becomes that app — a working one. You type
+in its own message box and press its own send button, exactly as pupils would
+at home. A small **i** button in the top-right corner opens the settings
+(encryption, app, this screen's role, connections, teaching notes) so nothing
+else clutters the screen.
 
-| App | What the sender fills in |
-|-----|--------------------------|
-| **Classic** | one message (the plain ClassPi look) |
-| **Chat (WhatsApp-style / Messenger-style)**, **Text messages** | one message, shown as a bubble thread |
-| **Email client** | subject + message |
-| **Login screen** | username + password |
-| **Card payment** | card number + expiry + security code |
+| App | What you fill in |
+|-----|------------------|
+| **Classic (no app)** | the control view: wire diagram, message box and trace |
+| **Chat (WhatsApp-style / Messenger-style)**, **Text messages** | type and send; messages stack up as a bubble thread |
+| **Email client** | subject + message, with an inbox on the receiver |
+| **Login screen** | username + password, then Sign in |
+| **Card payment** | card number + expiry + security code, then Pay |
 
 The chosen app travels with the message, so the receiver matches the sender
 automatically (there's an override on the receiver screen if you want it).
