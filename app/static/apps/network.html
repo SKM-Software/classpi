@@ -87,6 +87,22 @@
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 60; padding: 20px; }
   .modal.open { display: grid; }
   #infoCard { width: min(620px, 96vw); max-height: 90vh; overflow: auto; }
+
+  /* Finding the other Pis, so nobody has to type an IP address. */
+  .mepi {
+    margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--bg-2);
+    border: 1px solid var(--line); font-size: 15px;
+  }
+  .mepi b { font-family: var(--mono); color: var(--accent); }
+  .found {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap;
+  }
+  .found .who { flex: 1; min-width: 150px; }
+  .found .who b { font-size: 16px; }
+  .found .who span { display: block; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .found.isme { opacity: .65; }
+  .found .btn { padding: 6px 12px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -234,10 +250,21 @@
 
   <div class="trace" id="trace" style="margin-top:14px"></div>
 
-  <details style="margin-top:14px">
+  <details style="margin-top:14px" id="connectBox">
     <summary class="muted">Connect real Pis</summary>
-    <div class="row" style="margin-top:12px"><label>Receiver IP</label><input type="text" id="receiverIp" placeholder="e.g. 192.168.1.42"></div>
-    <div class="row"><label>Relay IP</label><input type="text" id="relayIp" placeholder="e.g. 192.168.1.43"></div>
+
+    <div class="mepi" id="mePi">Finding this Pi...</div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" id="findBtn">Find Pis on the network</button>
+      <span class="muted" id="findStatus" style="font-size:14px"></span>
+    </div>
+    <div id="foundList"></div>
+
+    <div class="row" style="margin-top:10px"><label>Receiver</label>
+      <input type="text" id="receiverIp" placeholder="pick one above, or type an address"></div>
+    <div class="row"><label>Middle</label>
+      <input type="text" id="relayIp" placeholder="only if you are using a middle Pi"></div>
     <div class="row">
       <button class="btn" id="testBtn">Test connections</button>
       <button class="btn" id="clearBtn">Clear inboxes</button>
@@ -483,6 +510,56 @@ async function pollPeers(receiverIp, relayIp) {
     } catch (_) {}
   }
 }
+
+// ---- finding the other Pis ----
+let scanned = false;
+async function findPis() {
+  const list = $("foundList"), st = $("findStatus");
+  st.textContent = "Scanning the network...";
+  $("findBtn").disabled = true;
+  list.innerHTML = "";
+  let d;
+  try {
+    d = await api("/api/net/discover", { method: "POST", body: {} });
+  } catch (err) {
+    st.textContent = "";
+    list.innerHTML = `<p class="muted" style="font-size:14px">Could not scan: ${escapeHtml(err.message)}</p>`;
+    $("findBtn").disabled = false;
+    return;
+  }
+  scanned = true;
+  $("mePi").innerHTML = `This Pi is <b>${escapeHtml(d.hostname)}</b> at <b>${escapeHtml(d.me)}</b>`;
+  const others = d.found.filter((f) => !f.self);
+  st.textContent = others.length
+    ? `Found ${others.length} other Pi${others.length === 1 ? "" : "s"}`
+    : "No other ClassPis answered";
+  if (!others.length) {
+    list.innerHTML = `<p class="muted" style="font-size:14px">Check the other Pis are switched on, on the same
+      network, and have finished starting up. You can still type an address by hand below.</p>`;
+  }
+  list.innerHTML += d.found.map((f) => `
+    <div class="found ${f.self ? "isme" : ""}">
+      <span class="who"><b>${escapeHtml(f.hostname)}</b><span>${escapeHtml(f.ip)}</span></span>
+      ${f.self ? '<span class="chip">this Pi</span>'
+               : `<button class="btn" data-pick="receiver" data-ip="${escapeHtml(f.ip)}">Use as receiver</button>
+                  <button class="btn" data-pick="relay" data-ip="${escapeHtml(f.ip)}">Use as middle</button>`}
+    </div>`).join("");
+  $("findBtn").disabled = false;
+}
+
+$("foundList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pick]");
+  if (!b) return;
+  const box = b.dataset.pick === "receiver" ? "receiverIp" : "relayIp";
+  $(box).value = b.dataset.ip;
+  if (b.dataset.pick === "relay") { $("useRelay").checked = true; positionWires(); }
+  toast(`Set as ${b.dataset.pick === "receiver" ? "receiver" : "middle"}: ${b.dataset.ip}`);
+});
+$("findBtn").onclick = findPis;
+// Scan the first time the teacher opens the section, so the list is just there.
+$("connectBox").addEventListener("toggle", () => {
+  if ($("connectBox").open && !scanned) findPis();
+});
 
 async function testConns() {
   const s = $("netStatus"); s.textContent = "Testing...";
@@ -757,6 +834,17 @@ async function setRole(r) {
 }
 $("monTheme").addEventListener("change", () => { monSig = ""; });
 document.querySelectorAll("#settings [data-role]").forEach((b) => b.onclick = () => { setRole(b.dataset.role); setInfo(false); });
+// Show this Pi's own address straight away - the other Pis need it, and it
+// saves hunting through the System app.
+(async () => {
+  try {
+    const w = await api("/api/net/ping", { method: "POST", body: { ip: "127.0.0.1" } });
+    $("mePi").innerHTML = `This Pi is <b>${escapeHtml(w.node.hostname)}</b> at <b>${escapeHtml(w.node.ip)}</b>`;
+  } catch (_) {
+    $("mePi").textContent = "Could not read this Pi's address - is the Network Lab node running?";
+  }
+})();
+
 let startRole = "sender";
 try { startRole = localStorage.getItem("classpi-net-role") || "sender"; } catch (_) {}
 setRole(startRole);

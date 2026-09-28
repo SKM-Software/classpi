@@ -10,6 +10,7 @@ Serves the launcher and classroom apps on 127.0.0.1 and provides a small API:
   /api/system/action   reboot / shutdown / exit kiosk (teacher PIN required)
 """
 import base64
+import concurrent.futures
 import hashlib
 import hmac
 import json
@@ -497,6 +498,50 @@ def net_peek():
         else:
             m["plain"] = cipher_apply(m.get("payload", ""), scheme, m.get("params", {}), decrypt=True)
     return jsonify(data)
+
+
+@app.post("/api/net/discover")
+def net_discover():
+    """Find the other ClassPis on this network so nobody has to type an IP.
+
+    Looks at every address on this Pi's own /24 and asks anything answering on
+    the Network Lab port to identify itself. One port, one subnet, our own
+    service - just enough to fill in the address boxes.
+    """
+    me = _ip_address()
+    if me == "not connected" or me.startswith("127."):
+        return jsonify(ok=False, error="This Pi is not on a network yet - plug in ethernet or join the Wi-Fi."), 400
+    if not requests:
+        return jsonify(ok=False, error="The 'requests' library is not installed on this Pi."), 500
+    port = int(CONFIG["net_port"])
+    base = me.rsplit(".", 1)[0]
+
+    def probe(n):
+        ip = f"{base}.{n}"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.4)
+        try:
+            if sock.connect_ex((ip, port)) != 0:
+                return None
+        except OSError:
+            return None
+        finally:
+            sock.close()
+        try:
+            info = requests.get(f"http://{ip}:{port}/whoami", timeout=1.5).json()
+        except Exception:
+            return None
+        if info.get("node") != "classpi":
+            return None
+        return {"ip": ip, "hostname": info.get("hostname") or ip, "self": ip == me}
+
+    found = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
+        for result in pool.map(probe, range(1, 255)):
+            if result:
+                found.append(result)
+    found.sort(key=lambda f: (not f["self"], f["hostname"]))
+    return jsonify(ok=True, me=me, hostname=socket.gethostname(), port=port, found=found)
 
 
 @app.post("/api/net/clear")

@@ -155,12 +155,13 @@ GitHub.
 
 1. Install ClassPi on each Pi **with the same shared key**, connected to the
    same network.
-2. On each Pi, open **System** and note its IP address (or use
-   `<device-name>.local`).
-3. Pick roles: one **sender**, one **receiver**, optionally one **middle**.
-   On each Pi open **Network Lab** and click that Pi's role at the top.
-4. On the sender, open *Connect real Pis*, enter the receiver's (and relay's)
-   address, and press *Test connections*.
+2. Pick roles: one **sender**, one **receiver**, optionally one **middle**. On
+   each Pi open **Network Lab**, press the **i** button (top-right) and choose
+   that Pi's role under *This screen*.
+3. On the sender, open the **i** settings → **Connect real Pis**. It scans the
+   network and lists the other Pis by name — click **Use as receiver** on one
+   and **Use as middle** on another. No IP addresses to look up or type.
+4. Press *Test connections* to confirm, then send a message.
 
 Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 
@@ -175,6 +176,7 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | Launcher shows but tools error | `journalctl -u classpi -e` for the server log. |
 | Forgot the teacher PIN | Ctrl+Alt+F2, log in, `sudo nano /etc/classpi/config.json`, change `teacher_pin`, then `sudo systemctl restart classpi`. |
 | Update button says "not installed from the GitHub clone" | The Pi was set up from a USB copy. Follow "Updating a Pi" in the README to switch it to the clone once. |
+| Network Lab finds no other Pis | They must be switched on, finished booting, and on the *same* network — all ethernet or all the same Wi-Fi. Check each Pi's address on its **System** screen; if the first three parts differ (e.g. 192.168.**1**.x vs 192.168.**4**.x) they are on separate networks. |
 | Want the Pi back to normal | `cd ~/classpi && sudo bash uninstall.sh`, then reboot. |
 
 Any other issue: `Ctrl+Alt+F2` always gets you a terminal, and

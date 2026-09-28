@@ -133,8 +133,33 @@ what that screen is, using the buttons at the top:
   **on** and enter both the receiver's and the relay's addresses. The message is
   routed sender → middle → receiver.
 
-Addresses can be an IP (e.g. `192.168.1.42`) or a hostname (e.g.
-`lab-pi-2.local`). Use **Test connections** to check the Pis can see each other.
+### Wiring them together (no IP addresses to look up)
+
+On the sender, open the settings (**i**, top-right) → **Connect real Pis**. It
+scans the network and lists every ClassPi it finds by name:
+
+```
+This Pi is lab-pi-1 at 192.168.1.41
+
+  lab-pi-2   192.168.1.42    [Use as receiver] [Use as middle]
+  lab-pi-3   192.168.1.43    [Use as receiver] [Use as middle]
+```
+
+Click **Use as receiver** on one and (if you want a spy in the middle) **Use as
+middle** on another — that also flips the *Put a Pi in the middle* switch for
+you. Nothing to type.
+
+The panel also shows **this Pi's own name and address** at the top, which is
+handy when you're standing at one of the others. Press **Find Pis on the
+network** again if you switch a Pi on later.
+
+If you'd rather type it, the boxes still accept an IP (`192.168.1.42`) or a
+hostname (`lab-pi-2.local`), and **Test connections** checks they can see each
+other. Each Pi's address is also on its **System** screen.
+
+> Nothing found? Check the other Pis are switched on, finished booting, and on
+> the same network (all on ethernet, or all on the same Wi-Fi — a Pi on the
+> guest network won't be seen).
 
 > Update all the Pis in a set together. A Pi still running an older version
 > will pass messages fine, but drops the app skin, so the receiver falls back
