@@ -161,6 +161,44 @@ other. Each Pi's address is also on its **System** screen.
 > the same network (all on ethernet, or all on the same Wi-Fi — a Pi on the
 > guest network won't be seen).
 
+### Direct cable lab — cutting the wire in front of the class
+
+The most convincing version of this lesson is physical: wire two Pis together,
+send a message, then **cut the cable and insert the middle Pi** in front of the
+pupils.
+
+**You need:** a **USB ethernet adapter** for the middle Pi (~£10, it needs two
+ports), an **RJ45 inline coupler** (~£3), and two ethernet cables. No switch or
+router.
+
+**Set it up** in the settings (**i**) → **Direct cable lab**, on each Pi. Press
+*Sender*, *Middle* or *Receiver*, enter the teacher PIN, done — each Pi takes a
+fixed address (`10.0.0.1`, `.2`, `.3`) so they can talk with no router handing
+out addresses. The middle Pi bridges its two ports so traffic really does pass
+through it. **Back to normal** returns any Pi to the school network.
+
+**The lesson:**
+
+1. Sender → cable → **coupler** → cable → receiver. Leave *Put a Pi in the
+   middle* off. Send. It arrives. *"These two are talking directly."*
+2. Pull the coupler apart and plug both cables into the middle Pi. Turn *Put a
+   Pi in the middle* on and pick it. Send again — it still arrives, and the
+   middle screen now shows the message.
+3. Plaintext: the middle reads it. Switch to **AES**: gibberish for the middle,
+   perfect for the receiver.
+4. **Switch the middle Pi off.** Nothing arrives at all — proof the traffic
+   genuinely runs through that machine, not just on screen.
+
+> Lab mode takes a Pi off the school network, so there's no internet or software
+> updates until you press **Back to normal**. Put the Pis back on the normal
+> network before you update them.
+
+> Being honest with pupils: even bridged, the middle Pi is *shown* the message
+> because the sender routes to it. Its physical position is real; the
+> interception is still consensual. A real attacker wouldn't ask — they'd force
+> the traffic through themselves (e.g. ARP spoofing), which is exactly why you
+> don't do that on a school network.
+
 > Update all the Pis in a set together. A Pi still running an older version
 > will pass messages fine, but drops the app skin, so the receiver falls back
 > to the Classic look.

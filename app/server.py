@@ -500,6 +500,54 @@ def net_peek():
     return jsonify(data)
 
 
+# ---------------------------------------------------------------- lab network
+LAB_MODES = {"sender": "10.0.0.1", "middle": "10.0.0.2", "receiver": "10.0.0.3"}
+LABNET = "/usr/local/sbin/classpi-labnet"
+
+
+def _eth_devices():
+    """Wired network ports on this Pi (so we know if a second one is plugged in)."""
+    try:
+        names = sorted(os.listdir("/sys/class/net"))
+    except OSError:
+        return []
+    skip = ("lo", "wlan", "br", "veth", "docker", "tun", "tap")
+    return [n for n in names if not n.startswith(skip)]
+
+
+@app.get("/api/net/labmode")
+def lab_mode():
+    ip = _ip_address()
+    mode = next((m for m, addr in LAB_MODES.items() if addr == ip), "normal")
+    eths = _eth_devices()
+    return jsonify(
+        ok=True, mode=mode, ip=ip, addresses=LAB_MODES,
+        eth_count=len(eths), eths=eths,
+        available=os.path.exists(LABNET),
+    )
+
+
+@app.post("/api/net/labmode")
+def set_lab_mode():
+    payload = request.get_json(silent=True) or {}
+    if not hmac.compare_digest(str(payload.get("pin", "")), str(CONFIG["teacher_pin"])):
+        time.sleep(1)
+        return jsonify(ok=False, error="Wrong PIN"), 403
+    mode = str(payload.get("mode", ""))
+    if mode not in LAB_MODES and mode != "normal":
+        return jsonify(ok=False, error="Unknown mode"), 400
+    if not os.path.exists(LABNET):
+        return jsonify(ok=False, error="This Pi was set up before lab mode existed - re-run install.sh."), 400
+    try:
+        done = subprocess.run(["sudo", "-n", LABNET, mode],
+                              capture_output=True, text=True, timeout=45)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    if done.returncode != 0:
+        return jsonify(ok=False, error=(done.stderr or done.stdout or "Could not change the network").strip()), 500
+    return jsonify(ok=True, mode=mode, message=done.stdout.strip(), ip=_ip_address())
+
+
 @app.post("/api/net/discover")
 def net_discover():
     """Find the other ClassPis on this network so nobody has to type an IP.

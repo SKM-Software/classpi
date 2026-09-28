@@ -272,6 +272,31 @@
     <p class="muted" id="netStatus" style="font-size:14px"></p>
   </details>
 
+  <details style="margin-top:10px" id="labBox">
+    <summary class="muted">Direct cable lab (no switch or router)</summary>
+    <p class="muted" style="font-size:14px;margin:10px 0">
+      For wiring the Pis straight to each other. Each Pi takes a fixed address so
+      they can still talk. The middle Pi bridges its two ports, so unplugging it
+      really does break the link - which is the point of the demo.</p>
+    <div class="mepi" id="labNow">Checking...</div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" data-lab="sender">Sender &middot; 10.0.0.1</button>
+      <button class="btn" data-lab="middle" id="labMiddle">Middle &middot; 10.0.0.2</button>
+      <button class="btn" data-lab="receiver">Receiver &middot; 10.0.0.3</button>
+      <button class="btn primary" data-lab="normal">Back to normal</button>
+    </div>
+    <div class="row" id="labPinRow" style="display:none">
+      <label for="labPin">Teacher PIN</label>
+      <input type="password" id="labPin" maxlength="8" style="width:110px" inputmode="numeric">
+      <button class="btn primary" id="labGo">Apply</button>
+      <button class="btn" id="labCancel">Cancel</button>
+    </div>
+    <p class="muted" id="labStatus" style="font-size:14px"></p>
+    <p class="muted" style="font-size:13px;color:var(--warn)">
+      Lab mode takes this Pi off the school network - no internet or software
+      updates until you press <b>Back to normal</b>.</p>
+  </details>
+
   <details class="note">
     <summary>Teaching notes</summary>
     <p><b>Plaintext:</b> anyone in the middle reads it. <b>Classical ciphers</b> (Caesar, Vigenere, Pigpen) scramble the text, but the middle can still crack them - the "Crack it" button on the middle screen shows how (brute-forcing 25 Caesar shifts, or reading pigpen off the key card). This is why they are not used for real security. <b>Modern encryption (AES)</b> needs a secret key that never travels, so the middle is stuck with gibberish.</p>
@@ -510,6 +535,60 @@ async function pollPeers(receiverIp, relayIp) {
     } catch (_) {}
   }
 }
+
+// ---- direct cable lab: fixed addresses, set from here ----
+const LAB_NAME = { sender: "Sender", middle: "Middle", receiver: "Receiver", normal: "normal network" };
+let labPending = null;
+
+async function refreshLab() {
+  let d;
+  try { d = await api("/api/net/labmode"); }
+  catch (_) { $("labNow").textContent = "Could not read the network setting."; return; }
+  $("labNow").innerHTML = d.mode === "normal"
+    ? `This Pi is on the <b>normal network</b> at <b>${escapeHtml(d.ip)}</b>`
+    : `This Pi is set as <b>${escapeHtml(LAB_NAME[d.mode])}</b> at <b>${escapeHtml(d.ip)}</b>`;
+  // The middle Pi needs a second port to bridge across.
+  const canBridge = d.eth_count >= 2;
+  $("labMiddle").disabled = !canBridge;
+  $("labMiddle").title = canBridge
+    ? "Bridge both wired ports so traffic passes through this Pi"
+    : "Needs a second wired port - plug in a USB ethernet adapter";
+  if (!d.available) {
+    $("labStatus").textContent = "This Pi was set up before lab mode existed - re-run install.sh to enable it.";
+    document.querySelectorAll("[data-lab]").forEach((b) => b.disabled = true);
+  }
+}
+
+document.querySelectorAll("[data-lab]").forEach((b) => b.onclick = () => {
+  labPending = b.dataset.lab;
+  $("labPinRow").style.display = "";
+  $("labStatus").textContent = `Set this Pi as ${LAB_NAME[labPending]}? Enter the teacher PIN.`;
+  $("labPin").value = "";
+  $("labPin").focus();
+});
+$("labCancel").onclick = () => {
+  labPending = null; $("labPinRow").style.display = "none"; $("labStatus").textContent = "";
+};
+$("labGo").onclick = async () => {
+  if (!labPending) return;
+  $("labStatus").textContent = "Changing the network...";
+  $("labGo").disabled = true;
+  try {
+    const r = await api("/api/net/labmode", { method: "POST", body: { pin: $("labPin").value, mode: labPending } });
+    $("labStatus").textContent = r.message || "Done";
+    $("labPinRow").style.display = "none";
+    labPending = null;
+    scanned = false;               // addresses changed, so the old scan is stale
+    $("foundList").innerHTML = "";
+  } catch (err) {
+    $("labStatus").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
+    $("labPin").value = ""; $("labPin").focus();
+  }
+  $("labGo").disabled = false;
+  refreshLab();
+};
+$("labPin").addEventListener("keydown", (e) => { if (e.key === "Enter") $("labGo").click(); });
+$("labBox").addEventListener("toggle", () => { if ($("labBox").open) refreshLab(); });
 
 // ---- finding the other Pis ----
 let scanned = false;

@@ -139,9 +139,66 @@ systemctl restart classpi classpi-net
 APPLY
 chmod 755 /usr/local/sbin/classpi-apply-update
 
-# allow the app to run only these exact power/kiosk/update commands without a password
+# Direct-cable lab mode: put this Pi on a fixed 10.0.0.x address so two or three
+# Pis wired straight to each other (no switch, no router) can still talk. The
+# middle Pi bridges its two network ports so traffic really does pass through it.
+cat > /usr/local/sbin/classpi-labnet <<'LABNET'
+#!/usr/bin/env bash
+# Switch this Pi between the normal network and the direct-cable lab.
+#   classpi-labnet sender|middle|receiver|normal
+set -euo pipefail
+command -v nmcli >/dev/null || { echo "NetworkManager (nmcli) not found."; exit 3; }
+
+LAB=10.0.0
+OURS=(classpi-lab classpi-br classpi-br-s1 classpi-br-s2)
+
+eth_devices() {
+  nmcli -t -f DEVICE,TYPE device status 2>/dev/null \
+    | awk -F: '$2=="ethernet"{print $1}' | grep -v '^br' || true
+}
+drop_ours() { for c in "${OURS[@]}"; do nmcli con delete "$c" >/dev/null 2>&1 || true; done; }
+
+case "${1:-}" in
+  sender|receiver)
+    [[ ${1} == sender ]] && N=1 || N=3
+    DEV="$(eth_devices | head -n1)"
+    [[ -n "$DEV" ]] || { echo "No wired network port found."; exit 4; }
+    drop_ours
+    # never-default: keep the school network / Wi-Fi as the route to the internet.
+    nmcli con add type ethernet con-name classpi-lab ifname "$DEV" \
+      ipv4.method manual ipv4.addresses "$LAB.$N/24" ipv4.never-default yes \
+      connection.autoconnect-priority 100 >/dev/null
+    nmcli con up classpi-lab >/dev/null
+    echo "This Pi is now $LAB.$N on $DEV"
+    ;;
+  middle)
+    mapfile -t DEVS < <(eth_devices)
+    [[ ${#DEVS[@]} -ge 2 ]] || {
+      echo "Needs two wired ports - plug in a USB ethernet adapter."; exit 5; }
+    drop_ours
+    # stp off: with it on the bridge blocks traffic for ~30s, which looks broken
+    # in the middle of a lesson.
+    nmcli con add type bridge con-name classpi-br ifname br0 \
+      ipv4.method manual ipv4.addresses "$LAB.2/24" ipv4.never-default yes \
+      bridge.stp no connection.autoconnect-priority 100 >/dev/null
+    nmcli con add type ethernet con-name classpi-br-s1 ifname "${DEVS[0]}" master br0 >/dev/null
+    nmcli con add type ethernet con-name classpi-br-s2 ifname "${DEVS[1]}" master br0 >/dev/null
+    nmcli con up classpi-br >/dev/null
+    echo "This Pi is now $LAB.2, bridging ${DEVS[0]} and ${DEVS[1]}"
+    ;;
+  normal)
+    drop_ours
+    for d in $(eth_devices); do nmcli device connect "$d" >/dev/null 2>&1 || true; done
+    echo "Back on the normal network"
+    ;;
+  *) echo "Usage: classpi-labnet sender|middle|receiver|normal"; exit 2 ;;
+esac
+LABNET
+chmod 755 /usr/local/sbin/classpi-labnet
+
+# allow the app to run only these exact power/kiosk/update/network commands without a password
 cat > /etc/sudoers.d/classpi <<SUDO
-$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service, /usr/local/sbin/classpi-apply-update
+$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service, /usr/local/sbin/classpi-apply-update, /usr/local/sbin/classpi-labnet sender, /usr/local/sbin/classpi-labnet middle, /usr/local/sbin/classpi-labnet receiver, /usr/local/sbin/classpi-labnet normal
 SUDO
 chmod 440 /etc/sudoers.d/classpi
 

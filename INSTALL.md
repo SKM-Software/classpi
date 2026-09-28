@@ -163,6 +163,13 @@ GitHub.
    and **Use as middle** on another. No IP addresses to look up or type.
 4. Press *Test connections* to confirm, then send a message.
 
+**Want to wire the Pis straight to each other** (no switch, and the cable-cutting
+demo)? Add a **USB ethernet adapter** for the middle Pi and an **RJ45 coupler**,
+then on each Pi use settings (**i**) → **Direct cable lab** to set it as Sender,
+Middle or Receiver. See the README's *Direct cable lab* section for the lesson
+sequence. Press **Back to normal** on each Pi afterwards to restore the school
+network.
+
 Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 
 ---
@@ -177,6 +184,8 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | Forgot the teacher PIN | Ctrl+Alt+F2, log in, `sudo nano /etc/classpi/config.json`, change `teacher_pin`, then `sudo systemctl restart classpi`. |
 | Update button says "not installed from the GitHub clone" | The Pi was set up from a USB copy. Follow "Updating a Pi" in the README to switch it to the clone once. |
 | Network Lab finds no other Pis | They must be switched on, finished booting, and on the *same* network — all ethernet or all the same Wi-Fi. Check each Pi's address on its **System** screen; if the first three parts differ (e.g. 192.168.**1**.x vs 192.168.**4**.x) they are on separate networks. |
+| No internet / updates after a Network Lab lesson | A Pi was left in **Direct cable lab** mode. Open Network Lab → **i** → *Direct cable lab* → **Back to normal**. |
+| "Middle" button greyed out in Direct cable lab | That Pi has only one wired port. The middle Pi needs a USB ethernet adapter so it can bridge two cables. |
 | Want the Pi back to normal | `cd ~/classpi && sudo bash uninstall.sh`, then reboot. |
 
 Any other issue: `Ctrl+Alt+F2` always gets you a terminal, and
