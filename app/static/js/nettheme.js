@@ -70,6 +70,99 @@
       <button type="button" class="nt-send" ${live ? "data-send" : "disabled"} title="Send">&#10148;</button>
     </div>`;
   }
+  // ------------------------------------------------------------ mail chrome
+  // A desktop mail client: header, ribbon, folder pane, message list and a
+  // reading/compose pane. The furniture is decorative - only the compose
+  // fields and Send actually do anything.
+  const ICO = {
+    menu: "M3 6h18M3 12h18M3 18h18",
+    search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
+    gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19 12l2-1-2-4-2 1-2-1-1-2h-4l-1 2-2 1-2-1-2 4 2 1v2l-2 1 2 4 2-1 2 1 1 2h4l1-2 2-1 2 1 2-4-2-1z",
+    help: "M12 17v.01M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4",
+    newmail: "M4 20h16M6 16l10-10 3 3-10 10H6v-3z",
+    trash: "M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13",
+    archive: "M3 7h18v3H3zM5 10v10h14V10M10 14h4",
+    reply: "M9 7L4 12l5 5M4 12h9a7 7 0 0 1 7 7",
+    replyall: "M8 7l-5 5 5 5M13 7l-5 5 5 5M8 12h8a5 5 0 0 1 5 5",
+    forward: "M15 7l5 5-5 5M20 12h-9a7 7 0 0 0-7 7",
+    flag: "M5 21V4h13l-2.5 4L18 12H5",
+    inbox: "M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z",
+    send: "M3 11l18-8-8 18-2-7-8-3z",
+    draft: "M4 20h16M6 16l10-10 3 3-10 10H6v-3z",
+    junk: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM6 6l12 12",
+    chev: "M9 6l6 6-6 6",
+  };
+  const ic = (n, sz) => `<svg viewBox="0 0 24 24" width="${sz || 18}" height="${sz || 18}" fill="none"
+    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true"><path d="${ICO[n]}"/></svg>`;
+
+  // Plausible classroom email so the inbox never looks empty.
+  const CANNED = [
+    { from: "IT Services", subject: "Password expiry reminder", peek: "Your network password will expire in 5 days. To change it...", when: "09:14" },
+    { from: "School Office", subject: "Parents' evening arrangements", peek: "Bookings open on Monday at 9am through the parent portal...", when: "Mon 08:32" },
+    { from: "Library", subject: "Overdue: Programming in Python", peek: "Our records show the following item is now overdue...", when: "Mon 16:05" },
+    { from: "N5 Computing", subject: "Assignment feedback", peek: "I have marked the assignments - see my comments in the...", when: "Fri 14:48" },
+    { from: "S. Kennedy", subject: "Higher prelim timetable", peek: "Please find the prelim timetable attached. Note the change...", when: "Fri 11:20" },
+  ];
+
+  function mailHeader() {
+    return `<div class="nt-ol-head">
+      <button class="nt-ol-waffle">${ic("menu", 20)}</button>
+      <span class="nt-ol-brand"><span class="nt-ol-mark"></span>Mail</span>
+      <div class="nt-ol-search">${ic("search", 16)}<span>Search</span></div>
+      <div class="nt-ol-hicons">${ic("gear", 18)}${ic("help", 18)}<span class="nt-ol-me">AM</span></div>
+    </div>`;
+  }
+  function mailRibbon() {
+    const btn = (icon, label) => `<span class="nt-ol-rb">${ic(icon)}${label}</span>`;
+    return `<div class="nt-ol-tabs"><b>Home</b><span>View</span><span>Help</span></div>
+      <div class="nt-ol-ribbon">
+        ${btn("newmail", "New mail")}<i></i>
+        ${btn("trash", "Delete")}${btn("archive", "Archive")}${btn("junk", "Report")}<i></i>
+        ${btn("reply", "Reply")}${btn("replyall", "Reply all")}${btn("forward", "Forward")}<i></i>
+        ${btn("flag", "Flag")}
+      </div>`;
+  }
+  function mailNav(unread) {
+    const f = (icon, name, count, on) =>
+      `<div class="nt-ol-f ${on ? "on" : ""}">${ic(icon, 16)}<span>${name}</span>${count ? `<b>${count}</b>` : ""}</div>`;
+    return `<div class="nt-ol-nav">
+      <button class="nt-ol-new">${ic("newmail", 16)} New mail</button>
+      <div class="nt-ol-sec">Favourites</div>
+      ${f("inbox", "Inbox", unread, true)}
+      ${f("send", "Sent Items", 0)}
+      ${f("draft", "Drafts", 1)}
+      ${f("trash", "Deleted Items", 0)}
+      ${f("archive", "Archive", 0)}
+      ${f("junk", "Junk Email", 0)}
+      <div class="nt-ol-sec">Folders</div>
+      ${f("inbox", "Computing S5", 0)}
+      ${f("inbox", "Staff notices", 0)}
+    </div>`;
+  }
+  function mailList(rows) {
+    return `<div class="nt-ol-listhead"><b>Inbox</b><span>Filter</span></div>
+      <div class="nt-ol-rows">${rows}</div>`;
+  }
+  function mailRow(from, subject, peek, when, unread, on) {
+    return `<div class="nt-ol-row ${on ? "on" : ""} ${unread ? "unread" : ""}">
+      <span class="nt-ol-dot"></span>
+      <div class="nt-ol-rtext">
+        <div class="nt-ol-rtop"><b>${esc(from)}</b><i>${esc(when)}</i></div>
+        <div class="nt-ol-rsub">${esc(subject) || "(no subject)"}</div>
+        <div class="nt-ol-rpeek">${esc(peek)}</div>
+      </div></div>`;
+  }
+  function mailShell(rows, pane, unread) {
+    return `<div class="nt-app nt-mail">
+      ${mailHeader()}${mailRibbon()}
+      <div class="nt-ol-body">
+        ${mailNav(unread)}
+        <div class="nt-ol-list">${mailList(rows)}</div>
+        <div class="nt-ol-pane">${pane}</div>
+      </div></div>`;
+  }
+
   // A chat theme is the same shell three times over - only the palette differs.
   function chatTheme(label, cls, title, inCls, outCls) {
     return {
@@ -106,40 +199,57 @@
     sms:       chatTheme("Text messages (SMS-style)", "nt-sms", "Messages", "nt-sms-in", "nt-sms-out"),
 
     email: {
-      label: "Email client",
+      label: "Email client (Outlook-style)",
       cls: "nt-mail",
       fields: [
-        { id: "subject", label: "Subject", placeholder: "Subject" },
-        { id: "body", label: "Message", placeholder: "Write your message...", area: true },
+        { id: "subject", label: "Subject", placeholder: "Add a subject" },
+        { id: "body", label: "Message", placeholder: "Type your message", area: true },
       ],
+      // Opens on the new-message screen, with the rest of the client around it.
       renderSender() {
-        return shell("nt-mail", bar("Mail", "New message"), `
-          <div class="nt-sheet">
-            <div class="nt-mrow"><span>To</span><div class="nt-mto">the other Pi</div></div>
-            <div class="nt-mrow"><span>Subject</span>
-              <input type="text" class="nt-flat" data-field="subject" placeholder="Subject" autocomplete="off"></div>
-            <textarea class="nt-flat nt-area" data-field="body" placeholder="Write your message..."></textarea>
-            <div class="nt-actions"><button type="button" class="nt-btn nt-primary" data-send>Send</button>
-              <span class="nt-status" data-status></span></div>
-          </div>`);
+        const rows = CANNED.map((c, i) => mailRow(c.from, c.subject, c.peek, c.when, i < 2, false)).join("");
+        return mailShell(rows, `
+          <div class="nt-ol-compose">
+            <div class="nt-ol-ctitle">New message</div>
+            <div class="nt-ol-crow"><span>To</span><div><span class="nt-ol-chip"><i></i>the other Pi</span></div></div>
+            <div class="nt-ol-crow"><span>Cc</span><div></div></div>
+            <div class="nt-ol-crow nt-ol-csub">
+              <input type="text" data-field="subject" placeholder="Add a subject" autocomplete="off"></div>
+            <div class="nt-ol-format">
+              <b>B</b><i>I</i><u>U</u><span class="nt-ol-sep"></span><span>A</span><span>&#9679;</span><span>&#8801;</span>
+            </div>
+            <textarea data-field="body" placeholder="Type your message"></textarea>
+            <div class="nt-ol-cactions">
+              <button type="button" class="nt-ol-send" data-send>${ic("send", 16)} Send</button>
+              <button type="button" class="nt-ol-discard">${ic("trash", 16)} Discard</button>
+              <span class="nt-status" data-status></span>
+            </div>
+          </div>`, 2);
       },
       renderReceiver(msgs) {
         const m = msgs[0];
         const [subject, body] = splitFor("email", m.plain != null ? m.plain : m.payload);
-        const list = msgs.slice(0, 8).map((x, i) => {
-          const [s] = splitFor("email", x.plain != null ? x.plain : x.payload);
-          return `<div class="nt-li ${i === 0 ? "on" : ""}"><b>${esc(x.from || "?")}</b>
-            <span>${esc(s) || "(no subject)"}</span><i>${esc(hhmm(x.at))}</i></div>`;
+        // Arrived mail sits at the top of an otherwise ordinary-looking inbox.
+        const got = msgs.slice(0, 6).map((x, i) => {
+          const [s, b] = splitFor("email", x.plain != null ? x.plain : x.payload);
+          return mailRow(x.from || "?", s, b, hhmm(x.at), i === 0, i === 0);
         }).join("");
-        return shell("nt-mail", bar("Mail", "Inbox"), `
-          <div class="nt-split">
-            <div class="nt-list">${list}</div>
-            <div class="nt-read">
-              <h2>${esc(subject) || "(no subject)"}</h2>
-              <div class="nt-from"><span class="nt-avatar"></span> from ${esc(m.from || "?")} &middot; ${esc(hhmm(m.at))}</div>
-              <div class="nt-mbody">${esc(body) || "(empty message)"}</div>
+        const rows = got + CANNED.map((c) => mailRow(c.from, c.subject, c.peek, c.when, false, false)).join("");
+        return mailShell(rows, `
+          <div class="nt-ol-read">
+            <h1>${esc(subject) || "(no subject)"}</h1>
+            <div class="nt-ol-rhead">
+              <span class="nt-ol-av">${esc((m.from || "?").slice(0, 2).toUpperCase())}</span>
+              <div class="nt-ol-rwho"><b>${esc(m.from || "?")}</b><span>To: me</span></div>
+              <i>${esc(new Date((m.at || 0) * 1000).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }))}</i>
             </div>
-          </div>`);
+            <div class="nt-ol-rbody">${esc(body) || "(empty message)"}</div>
+            <div class="nt-ol-ractions">
+              <button type="button">${ic("reply", 15)} Reply</button>
+              <button type="button">${ic("replyall", 15)} Reply all</button>
+              <button type="button">${ic("forward", 15)} Forward</button>
+            </div>
+          </div>`, msgs.length);
       },
       noteSent(root) { status(root, "Message sent"); },
     },
@@ -364,28 +474,102 @@
 .nt-sms-in { background: #e9e9eb; }
 .nt-sms-out { background: #1d8cf8; color: #fff; }
 
-.nt-mail .nt-bar { background: #1a73e8; }
-.nt-mail .nt-app-body { background: #f6f8fc; }
-.nt-sheet { background: #fff; margin: 22px auto; width: min(760px, 94%); border-radius: 12px;
-  box-shadow: 0 2px 14px rgba(0,0,0,.12); padding: 18px 20px; }
-.nt-mrow { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e6e8ec; padding: 10px 0; }
-.nt-mrow > span { width: 70px; color: #5f6368; font-size: 14px; }
-.nt-mto { color: #202124; }
-.nt-flat { border: 0; outline: none; font-size: 17px; width: 100%; font-family: inherit; color: #202124; background: transparent; }
-.nt-area { min-height: 220px; resize: vertical; padding: 16px 0; line-height: 1.5; }
-.nt-actions { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid #e6e8ec; }
-.nt-split { display: flex; flex: 1; min-height: 0; }
-.nt-list { width: 300px; border-right: 1px solid #e0e3e8; overflow: auto; background: #fff; }
-.nt-li { padding: 13px 16px; border-bottom: 1px solid #eef0f3; font-size: 14px; cursor: default; }
-.nt-li.on { background: #e8f0fe; }
-.nt-li b { display: block; color: #202124; }
-.nt-li span { display: block; color: #5f6368; margin-top: 2px; }
-.nt-li i { color: #9aa0a6; font-style: normal; font-size: 12px; }
-.nt-read { flex: 1; padding: 26px 32px; overflow: auto; background: #fff; }
-.nt-read h2 { margin: 0 0 12px; font-size: 24px; color: #202124; font-weight: 500; }
-.nt-from { display: flex; align-items: center; gap: 10px; color: #5f6368; font-size: 14px; margin-bottom: 18px; }
-.nt-from .nt-avatar { background: #c8d6e5; width: 30px; height: 30px; flex: 0 0 30px; }
-.nt-mbody { font-size: 17px; line-height: 1.6; color: #202124; white-space: pre-wrap; word-break: break-word; }
+/* --- desktop mail client (Outlook-style layout) --- */
+.nt-mail { background: #f3f3f3; color: #201f1e; font-size: 14px; }
+.nt-ol-head { display: flex; align-items: center; gap: 14px; padding: 0 14px; height: 48px;
+  background: #0f6cbd; color: #fff; flex: 0 0 auto; }
+.nt-ol-waffle { background: none; border: 0; color: #fff; cursor: pointer; display: grid; place-items: center; padding: 6px; border-radius: 4px; }
+.nt-ol-brand { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; }
+.nt-ol-mark { width: 21px; height: 17px; border-radius: 3px; background: #fff; position: relative; }
+.nt-ol-mark::after { content: ""; position: absolute; inset: 3px; border: 2px solid #0f6cbd; border-radius: 1px;
+  clip-path: polygon(0 0, 100% 0, 50% 60%); }
+.nt-ol-search { flex: 1; max-width: 520px; display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.18); border-radius: 4px; padding: 6px 10px; color: #eaf2fb; }
+.nt-ol-hicons { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.nt-ol-me { width: 30px; height: 30px; border-radius: 50%; background: #c8a1e0; color: #3a1d4e;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.nt-ol-tabs { display: flex; gap: 20px; padding: 7px 18px 0; background: #fff; font-size: 13px;
+  color: #444; flex: 0 0 auto; }
+.nt-ol-tabs b { color: #0f6cbd; border-bottom: 2px solid #0f6cbd; padding-bottom: 5px; }
+.nt-ol-ribbon { display: flex; align-items: center; gap: 4px; padding: 5px 14px 7px; background: #fff;
+  border-bottom: 1px solid #e1dfdd; flex: 0 0 auto; overflow: hidden; }
+.nt-ol-rb { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 4px;
+  font-size: 13px; white-space: nowrap; cursor: default; }
+.nt-ol-rb:hover { background: #f0f0f0; }
+.nt-ol-ribbon i { width: 1px; height: 20px; background: #e1dfdd; margin: 0 6px; flex: 0 0 1px; }
+.nt-ol-body { flex: 1; min-height: 0; display: flex; }
+.nt-ol-nav { width: 210px; flex: 0 0 210px; background: #f3f3f3; padding: 12px 8px; overflow: auto;
+  border-right: 1px solid #e6e4e2; }
+.nt-ol-new { display: flex; align-items: center; gap: 8px; width: 100%; background: #0f6cbd; color: #fff;
+  border: 0; border-radius: 4px; padding: 9px 12px; font-size: 14px; font-weight: 600; cursor: pointer;
+  font-family: inherit; margin-bottom: 14px; }
+.nt-ol-sec { font-size: 12px; color: #605e5c; padding: 10px 10px 5px; font-weight: 600; }
+.nt-ol-f { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 4px; cursor: default; }
+.nt-ol-f span { flex: 1; }
+.nt-ol-f b { font-size: 12px; color: #0f6cbd; }
+.nt-ol-f:hover { background: #ebeaea; }
+.nt-ol-f.on { background: #e1eefa; font-weight: 600; }
+.nt-ol-list { width: 340px; flex: 0 0 340px; background: #fff; border-right: 1px solid #e6e4e2;
+  display: flex; flex-direction: column; min-height: 0; }
+.nt-ol-listhead { display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; border-bottom: 1px solid #edebe9; font-size: 13px; }
+.nt-ol-listhead b { font-size: 15px; }
+.nt-ol-listhead span { color: #0f6cbd; }
+.nt-ol-rows { flex: 1; overflow: auto; min-height: 0; }
+.nt-ol-row { display: flex; gap: 8px; padding: 9px 12px 9px 8px; border-bottom: 1px solid #f2f1f0; cursor: default; }
+.nt-ol-row:hover { background: #f5f5f5; }
+.nt-ol-row.on { background: #e1eefa; box-shadow: inset 3px 0 0 #0f6cbd; }
+.nt-ol-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: 0 0 8px; background: transparent; }
+.nt-ol-row.unread .nt-ol-dot { background: #0f6cbd; }
+.nt-ol-rtext { min-width: 0; flex: 1; }
+.nt-ol-rtop { display: flex; justify-content: space-between; gap: 8px; }
+.nt-ol-rtop b { font-size: 14px; }
+.nt-ol-rtop i { font-style: normal; font-size: 12px; color: #605e5c; white-space: nowrap; }
+.nt-ol-row.unread .nt-ol-rsub { color: #0f6cbd; font-weight: 700; }
+.nt-ol-rsub { font-size: 13px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-ol-rpeek { font-size: 12px; color: #605e5c; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-ol-pane { flex: 1; min-width: 0; background: #fff; display: flex; flex-direction: column; }
+
+.nt-ol-compose { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 22px 0; }
+.nt-ol-ctitle { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+.nt-ol-crow { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #edebe9; padding: 9px 0; }
+.nt-ol-crow > span { width: 34px; color: #605e5c; font-size: 13px; }
+.nt-ol-crow > div { flex: 1; }
+.nt-ol-chip { display: inline-flex; align-items: center; gap: 7px; background: #eff6fc; border-radius: 14px;
+  padding: 3px 11px 3px 4px; font-size: 13px; }
+.nt-ol-chip i { width: 20px; height: 20px; border-radius: 50%; background: #a4c7e8; }
+.nt-ol-csub input, .nt-ol-compose textarea { border: 0; outline: none; width: 100%; font-family: inherit;
+  color: #201f1e; background: transparent; }
+.nt-ol-csub input { font-size: 15px; padding: 2px 0; }
+.nt-ol-format { display: flex; align-items: center; gap: 14px; padding: 9px 2px; color: #444;
+  border-bottom: 1px solid #edebe9; font-size: 14px; }
+.nt-ol-format b, .nt-ol-format i, .nt-ol-format u, .nt-ol-format span { cursor: default; }
+.nt-ol-sep { width: 1px; height: 16px; background: #e1dfdd; }
+.nt-ol-compose textarea { flex: 1; min-height: 140px; resize: none; font-size: 15px; line-height: 1.55; padding: 14px 0; }
+.nt-ol-cactions { display: flex; align-items: center; gap: 10px; padding: 12px 0 16px; border-top: 1px solid #edebe9; }
+.nt-ol-send, .nt-ol-discard { display: inline-flex; align-items: center; gap: 7px; border-radius: 4px;
+  padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
+.nt-ol-send { background: #0f6cbd; color: #fff; }
+.nt-ol-discard { background: #fff; color: #201f1e; border-color: #8a8886; }
+.nt-ol-cactions .nt-status { margin: 0; text-align: left; }
+
+.nt-ol-read { flex: 1; min-height: 0; overflow: auto; padding: 22px 30px; }
+.nt-ol-read h1 { margin: 0 0 16px; font-size: 22px; font-weight: 600; word-break: break-word; }
+.nt-ol-rhead { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #edebe9; }
+.nt-ol-av { width: 40px; height: 40px; border-radius: 50%; background: #c8a1e0; color: #3a1d4e;
+  display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: 0 0 40px; }
+.nt-ol-rwho { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.nt-ol-rwho b { font-size: 15px; }
+.nt-ol-rwho span { font-size: 12px; color: #605e5c; }
+.nt-ol-rhead i { font-style: normal; font-size: 12px; color: #605e5c; white-space: nowrap; }
+.nt-ol-rbody { font-size: 15px; line-height: 1.65; padding: 20px 0; white-space: pre-wrap; word-break: break-word; }
+.nt-ol-ractions { display: flex; gap: 10px; }
+.nt-ol-ractions button { display: inline-flex; align-items: center; gap: 7px; background: #fff;
+  border: 1px solid #8a8886; border-radius: 4px; padding: 7px 15px; font-size: 14px; cursor: pointer; font-family: inherit; }
+/* narrow screens: drop the side panes rather than squashing everything */
+@media (max-width: 1100px) { .nt-ol-list { flex-basis: 260px; width: 260px; } }
+@media (max-width: 900px) { .nt-ol-nav { display: none; } }
+@media (max-width: 680px) { .nt-ol-list { display: none; } }
 
 .nt-login .nt-app-body { background: linear-gradient(160deg, #eef2f9, #dfe7f5); align-items: center; justify-content: center; }
 .nt-bank .nt-bar { background: #0b3d2c; }
