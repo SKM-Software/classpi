@@ -127,9 +127,14 @@
 
     <div class="panel">
       <div class="row">
+        <label for="theme">App</label>
+        <select id="theme" style="flex:1"></select>
+      </div>
+      <div class="row" id="rowMsg">
         <label for="msg">Message</label>
         <input type="text" id="msg" value="Meet me at the gates at 3pm" maxlength="200">
       </div>
+      <div id="themeFields"></div>
       <div class="row">
         <label class="switch" title="Add a middle Pi">
           <input type="checkbox" id="useRelay"><span class="track"></span>
@@ -164,6 +169,11 @@
       </div>
       <button class="btn primary" id="sendBtn" style="width:100%; font-size:20px; padding:14px">&#9654; Send message</button>
 
+      <div id="themePreviewWrap" style="margin-top:16px;display:none">
+        <div class="muted" style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">What it looks like in the app</div>
+        <div id="themePreview"></div>
+      </div>
+
       <div class="trace" id="trace" style="margin-top:18px"></div>
 
       <details style="margin-top:14px">
@@ -181,6 +191,8 @@
         <summary>Teaching notes</summary>
         <p><b>Plaintext:</b> anyone in the middle reads it. <b>Classical ciphers</b> (Caesar, Vigenere, Pigpen) scramble the text, but the middle can still crack them - the "Crack it" button on the middle screen shows how (brute-forcing 25 Caesar shifts, or reading pigpen off the key card). This is why they are not used for real security. <b>Modern encryption (AES)</b> needs a secret key that never travels, so the middle is stuck with gibberish.</p>
         <p>A nice point for pupils (Kerckhoffs's principle): the algorithm can be public knowledge - what keeps a message safe is the secrecy of the <i>key</i>, not the method.</p>
+        <p><b>The App chooser</b> skins the sender and receiver to look like apps pupils actually use. The middle screen is deliberately never skinned: the friendly interface is only skin deep, and the network sees the same bytes either way.</p>
+        <p>Try the <b>Card payment</b> app with a Caesar shift. Classical ciphers only move letters A-Z, so the card number, expiry and security code travel across the wire completely unscrambled - the sharpest demonstration in this app of why classical ciphers are useless for real data. (The card details here are fake; never type a real card number.)</p>
         <p>The middle Pi here is an honest relay you route through on purpose, so the whole demo runs safely on your own kit. Real attacks (e.g. ARP spoofing) force traffic through an attacker without consent - worth naming for pupils, but not something to run on a live network.</p>
       </details>
     </div>
@@ -193,6 +205,10 @@
         <span class="chip" id="monRole"></span>
         <span class="chip" id="monHost">this Pi</span>
         <span class="chip" id="monLive">waiting...</span>
+        <label id="monThemeWrap" style="display:none;align-items:center;gap:8px">
+          <span class="muted" style="font-size:14px">App:</span>
+          <select id="monTheme"></select>
+        </label>
       </div>
       <div class="muted" id="monHint" style="font-size:18px"></div>
       <div id="monLatest" style="margin:22px 0;min-height:22vmin;display:grid;place-items:center">
@@ -204,9 +220,11 @@
 </div>
 
 <script src="/js/common.js"></script>
+<script src="/js/nettheme.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const stage = $("stage"), packet = $("packet");
+NetThemes.injectCss();
 let busy = false;
 
 function layout() {
@@ -294,7 +312,11 @@ function pigpenRender(text, size) {
     return pigSpec(ch) ? pigGlyph(ch, size) : escapeHtml(ch);
   }).join("") + `</span>`;
 }
-function wireHtml(text, scheme, size) { return scheme === "pigpen" ? pigpenRender(text, size || 24) : escapeHtml(text); }
+// Raw views (wire, spy, trace) show the field separator as a visible glyph so
+// a multi-field message does not look like one mashed-together string.
+function wireHtml(text, scheme, size) {
+  return scheme === "pigpen" ? pigpenRender(text, size || 24) : escapeHtml(NetThemes.showRaw(text));
+}
 
 function setMiddleReadout(trace, scheme) {
   const box = $("seenRelay").parentElement;
@@ -323,7 +345,7 @@ async function send() {
   let trace;
   try {
     const r = await api("/api/net/send", { method: "POST", body: {
-      message: $("msg").value, scheme, ...paramsFor(scheme),
+      message: composeText(), scheme, theme: themeId(), ...paramsFor(scheme),
       simulate: !live, receiver: receiverIp, relay: useRelay ? relayIp : "",
     }});
     trace = r.trace;
@@ -336,9 +358,9 @@ async function send() {
   const tag = trace.strength === "none" ? "plaintext" : strong ? "encrypted (AES)" : "classical cipher";
 
   if (!$("showAnim").checked) {
-    $("seenSender").textContent = trace.sent;
+    $("seenSender").textContent = NetThemes.showJoined(trace.sent);
     if (useRelay) setMiddleReadout(trace, scheme);
-    $("seenReceiver").textContent = trace.receiver_reads;
+    $("seenReceiver").textContent = NetThemes.showJoined(trace.receiver_reads);
     $("seenReceiver").parentElement.className = "seen safe";
     renderTrace(trace, useRelay);
     if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
@@ -381,18 +403,18 @@ async function send() {
 function renderTrace(t, useRelay) {
   const strengthLabel = { none: "none - plaintext", classical: "classical - weak", modern: "modern - strong" }[t.strength];
   const rows = [
-    ["Sender typed", escapeHtml(t.sent), ""],
+    ["Sender typed", escapeHtml(NetThemes.showJoined(t.sent)), ""],
     ["Cipher", escapeHtml(t.scheme_label) + " (" + strengthLabel + ")", ""],
     ["Travelling on the wire", wireHtml(t.on_wire, t.scheme, 20), t.strength === "modern" ? "safe" : t.strength === "classical" ? "warn" : ""],
   ];
   if (useRelay) {
     let v, cls;
-    if (t.strength === "none") { v = escapeHtml(t.relay_can_read); cls = "leak"; }
+    if (t.strength === "none") { v = escapeHtml(NetThemes.showRaw(t.relay_can_read)); cls = "leak"; }
     else if (t.strength === "modern") { v = "nothing readable - only ciphertext"; cls = "safe"; }
     else { v = "scrambled - but can be cracked"; cls = "warn"; }
     rows.push(["Middle Pi could read", v, cls]);
   }
-  rows.push(["Receiver reads", escapeHtml(t.receiver_reads), "safe"]);
+  rows.push(["Receiver reads", escapeHtml(NetThemes.showJoined(t.receiver_reads)), "safe"]);
   $("trace").innerHTML = rows.map(([k, v, cls]) =>
     `<div><span class="k">${k}</span><br><span class="${cls}">${v}</span></div>`).join("");
 }
@@ -401,7 +423,7 @@ async function pollPeers(receiverIp, relayIp) {
   try {
     const inbox = await api("/api/net/peek", { method: "POST", body: { ip: receiverIp, kind: "inbox" } });
     const m = inbox.messages && inbox.messages[0];
-    if (m) $("seenReceiver").textContent = m.plain != null ? m.plain : m.payload;
+    if (m) $("seenReceiver").textContent = NetThemes.showJoined(m.plain != null ? m.plain : m.payload);
   } catch (_) {}
   if (relayIp) {
     try {
@@ -469,6 +491,64 @@ function updateCipherUI() {
 $("cipher").addEventListener("change", updateCipherUI);
 updateCipherUI();
 
+// ---- app theme: build the choosers, swap the compose fields ----
+NetThemes.list.forEach((t) => {
+  $("theme").add(new Option(t.label, t.id));
+  $("monTheme").add(new Option(t.label, t.id));
+});
+$("monTheme").add(new Option("Auto - match sender", "auto"), 0);
+$("monTheme").value = "auto";
+
+// Build the multi-field compose rows for every theme that needs them.
+NetThemes.list.forEach(({ id }) => {
+  const def = NetThemes.get(id);
+  if (!def.fields) return;
+  const wrap = document.createElement("div");
+  wrap.className = "theme-field";
+  wrap.id = "fields-" + id;
+  wrap.style.display = "none";
+  wrap.innerHTML = def.fields.map((f) =>
+    `<div class="row"><label for="tf-${id}-${f.id}">${f.label}</label>
+     <input type="text" id="tf-${id}-${f.id}" maxlength="${f.max}" autocomplete="off" value="${NetThemes.esc(f.value)}"></div>`
+  ).join("") + (def.warn ? `<div class="row"><span class="muted" style="font-size:14px;color:var(--warn)">${def.warn}</span></div>` : "");
+  $("themeFields").appendChild(wrap);
+});
+
+function themeId() { return $("theme").value; }
+function themeFieldEls(id) {
+  const def = NetThemes.get(id);
+  return def.fields ? def.fields.map((f) => $(`tf-${id}-${f.id}`)) : [];
+}
+function composeValues() {
+  const id = themeId();
+  const els = themeFieldEls(id);
+  return els.length ? els.map((el) => el.value) : [$("msg").value];
+}
+function composeText() { return NetThemes.join(composeValues()); }
+
+function updateThemeUI() {
+  const id = themeId();
+  const def = NetThemes.get(id);
+  document.querySelectorAll(".theme-field").forEach((el) => el.style.display = "none");
+  $("rowMsg").style.display = def.fields ? "none" : "";
+  if (def.fields) $("fields-" + id).style.display = "";
+  $("themePreviewWrap").style.display = id === "classic" ? "none" : "";
+  try { localStorage.setItem("classpi-net-theme", id); } catch (_) {}
+  drawPreview();
+}
+function drawPreview() {
+  const def = NetThemes.get(themeId());
+  if (themeId() === "classic") return;
+  $("themePreview").innerHTML = def.renderPreview(composeValues());
+}
+$("theme").addEventListener("change", updateThemeUI);
+document.addEventListener("input", (e) => {
+  if (e.target.id === "msg" || /^tf-/.test(e.target.id)) drawPreview();
+});
+try { $("theme").value = localStorage.getItem("classpi-net-theme") || "classic"; } catch (_) {}
+if (!NetThemes.defs[$("theme").value]) $("theme").value = "classic";
+updateThemeUI();
+
 // ---- pigpen key card ----
 function showPigKey() {
   let m = document.getElementById("pigKeyModal");
@@ -526,7 +606,7 @@ function middleView(m) {
   const s = m.scheme || "none";
   if (s === "none") {
     return `<div><div class="chip" style="color:#ffb0b0;border-color:var(--bad)">intercepted plaintext</div>
-      <div style="font-size:5vmin;font-weight:800;color:#ffd6d6;margin-top:14px;word-break:break-word">${escapeHtml(m.payload)}</div></div>`;
+      <div style="font-size:5vmin;font-weight:800;color:#ffd6d6;margin-top:14px;word-break:break-word">${escapeHtml(NetThemes.showRaw(m.payload))}</div></div>`;
   }
   if (s === "modern") {
     return `<div><div class="chip safe" style="color:#9dffdf">encrypted - cannot read</div>
@@ -541,17 +621,14 @@ function middleView(m) {
     <button class="btn" style="margin-top:16px" onclick="crack(this,'classical')">Crack it</button>
     <div class="crackout" style="margin-top:10px;font-size:3.4vmin;font-weight:800;color:#9dffdf"></div></div>`;
 }
-function receiverView(m) {
-  const text = m.plain != null ? m.plain : m.payload;
-  const label = (m.scheme || "none") === "none" ? "received (was plaintext)" : "decoded with the shared setup (" + schemeName(m.scheme) + ")";
-  return `<div><div class="chip">${label}</div>
-    <div style="font-size:6vmin;font-weight:800;color:#cffbe9;margin-top:14px;word-break:break-word">${escapeHtml(text)}</div></div>`;
+function receiverView(msgs, theme) {
+  return NetThemes.get(theme).renderReceiver(msgs);
 }
 function logLine(m, role) {
   const t = new Date((m.at || 0) * 1000).toLocaleTimeString("en-GB");
   let shown;
-  if (role === "middle") shown = m.scheme === "modern" ? "[encrypted]" : m.scheme === "pigpen" ? "[pigpen symbols]" : m.payload;
-  else shown = m.plain != null ? m.plain : m.payload;
+  if (role === "middle") shown = m.scheme === "modern" ? "[encrypted]" : m.scheme === "pigpen" ? "[pigpen symbols]" : NetThemes.showRaw(m.payload);
+  else shown = NetThemes.showJoined(m.plain != null ? m.plain : m.payload);
   return `<div style="font-family:var(--mono);font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)">
     <span class="muted">${t} from ${escapeHtml(m.from || "?")}:</span> ${escapeHtml(shown)}</div>`;
 }
@@ -570,13 +647,17 @@ async function pollMonitor(role) {
   const msgs = data.messages || [];
   const latest = msgs[0];
   crackPlain = latest ? latest.plain : null;
+  // The receiver matches the sender's app unless the teacher overrides it here.
+  const pick = $("monTheme").value;
+  const effTheme = role === "middle" ? "raw"
+    : (pick === "auto" ? ((latest && latest.theme) || "classic") : pick);
   // Only redraw when something actually changed, so a revealed crack stays put.
-  const sig = JSON.stringify(msgs.map((m) => [m.at, m.scheme, m.payload]));
+  const sig = JSON.stringify(msgs.map((m) => [m.at, m.scheme, m.payload, m.theme])) + "|" + effTheme;
   if (sig === monSig) return;
   monSig = sig;
   const box = $("monLatest");
   if (!latest) box.innerHTML = '<div class="muted" style="font-size:22px">Waiting for a message...</div>';
-  else box.innerHTML = role === "middle" ? middleView(latest) : receiverView(latest);
+  else box.innerHTML = role === "middle" ? middleView(latest) : receiverView(msgs, effTheme);
   $("monLog").innerHTML = msgs.slice(0, 8).map((m) => logLine(m, role)).join("");
 }
 
@@ -591,12 +672,15 @@ async function setRole(role) {
   if (!monitor) { $("modeChip").textContent = "Sender"; return; }
   $("modeChip").textContent = role === "middle" ? "Middle screen" : "Receiver screen";
   $("monRole").textContent = role === "middle" ? "MIDDLE (intercepting)" : "RECEIVER";
+  // The middle screen is never themed - that is the teaching point.
+  $("monThemeWrap").style.display = role === "receiver" ? "inline-flex" : "none";
   $("monHint").textContent = ROLE_HINT[role];
   try { const w = await api("/api/net/ping", { method: "POST", body: { ip: "127.0.0.1" } }); $("monHost").textContent = w.node.hostname + " / " + w.node.ip; } catch (_) {}
   monSig = "";   // force a fresh draw when the role changes
   pollMonitor(role);
   monTimer = setInterval(() => pollMonitor(role), 1000);
 }
+$("monTheme").addEventListener("change", () => { monSig = ""; });
 document.querySelectorAll(".rolebar .btn").forEach((b) => b.onclick = () => setRole(b.dataset.role));
 let startRole = "sender";
 try { startRole = localStorage.getItem("classpi-net-role") || "sender"; } catch (_) {}

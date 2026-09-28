@@ -378,6 +378,9 @@ SCHEME_META = {
     "modern":   {"label": "Modern encryption (AES)",   "strength": "modern"},
 }
 
+# App skins for the sender/receiver screens (the middle screen is never themed).
+NET_THEMES = {"classic", "whatsapp", "messenger", "sms", "email", "login", "banking"}
+
 
 def _caesar(text, shift, decrypt=False):
     if decrypt:
@@ -394,10 +397,12 @@ def _caesar(text, shift, decrypt=False):
 
 
 def _vigenere(text, key, decrypt=False):
-    key = "".join(c for c in key.upper() if c.isalpha()) or "KEY"
+    # A-Z only, like _caesar: the shift maths is ASCII, so letting accented
+    # characters through here would corrupt them instead of passing them on.
+    key = "".join(c for c in key.upper() if "A" <= c <= "Z") or "KEY"
     out, ki = [], 0
     for ch in text:
-        if ch.isalpha():
+        if "a" <= ch <= "z" or "A" <= ch <= "Z":
             k = ord(key[ki % len(key)]) - 65
             if decrypt:
                 k = -k
@@ -478,8 +483,12 @@ def net_peek():
         return jsonify(ok=False, error=str(exc)), 502
     # Work out the readable form of each message for display.
     for m in data.get("messages", []):
-        scheme = m.get("scheme", "none")
+        scheme = str(m.get("scheme", "none"))
         m["strength"] = SCHEME_META.get(scheme, SCHEME_META["none"])["strength"]
+        # Messages arrive from a LAN-reachable port, so pin the theme to a
+        # known value before the browser uses it to pick a renderer.
+        if str(m.get("theme")) not in NET_THEMES:
+            m["theme"] = "classic"
         if scheme == "modern" and as_middle:
             # The interceptor does not hold the pre-shared key - it cannot read this.
             m["plain"] = None
@@ -530,9 +539,14 @@ def net_send():
     relay = str(d.get("relay", "")).strip()
     simulate = bool(d.get("simulate"))
 
-    scheme = d.get("scheme", "none")
+    # str() first: a JSON object/array here is unhashable and would otherwise
+    # blow up the membership test.
+    scheme = str(d.get("scheme", "none"))
     if scheme not in SCHEME_META:
         scheme = "none"
+    theme = str(d.get("theme", "classic"))
+    if theme not in NET_THEMES:
+        theme = "classic"
     # Classical parameters travel with the message (the algorithm is public;
     # only a modern key stays secret). Modern carries no key at all.
     params = {}
@@ -551,6 +565,7 @@ def net_send():
     trace = {
         "sent": text,
         "scheme": scheme,
+        "theme": theme,
         "scheme_label": meta["label"],
         "strength": meta["strength"],
         "params": params,
@@ -567,7 +582,8 @@ def net_send():
     if not receiver:
         return jsonify(ok=False, error="Enter the receiver's address (or use Simulate)"), 400
 
-    envelope = {"payload": payload, "scheme": scheme, "params": params, "from": socket.gethostname()}
+    envelope = {"payload": payload, "scheme": scheme, "params": params,
+                "theme": theme, "from": socket.gethostname()}
     try:
         if relay:
             r = _node(relay, "/relay", method="post", json={**envelope, "next": receiver})

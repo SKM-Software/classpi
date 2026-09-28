@@ -62,6 +62,9 @@ def _record(d):
         "payload": str(d.get("payload", "")),
         "scheme": str(d.get("scheme", "none")),
         "params": d.get("params", {}) if isinstance(d.get("params"), dict) else {},
+        # Which app skin the sender used, so the receiver can match it. The
+        # node just stores it; the control panel validates it against a list.
+        "theme": str(d.get("theme", "classic"))[:24],
         "from": str(d.get("from", "?")),
         "at": time.time(),
     }
@@ -87,7 +90,8 @@ def relay():
         try:
             requests.post(f"http://{nxt}:{PORT}/message",
                           json={"payload": rec["payload"], "scheme": rec["scheme"],
-                                "params": rec["params"], "from": rec["from"]},
+                                "params": rec["params"], "theme": rec["theme"],
+                                "from": rec["from"]},
                           timeout=3)
             forwarded = True
         except requests.RequestException as exc:

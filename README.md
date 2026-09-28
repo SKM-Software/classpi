@@ -18,7 +18,7 @@ too.
 | **Python Lab** | A real code editor + runner. Auto-indent, line numbers, save/open pupil work, worked examples for every SQA standard algorithm. Runs code safely in a sandbox with a 5-second timeout and a memory cap. |
 | **Binary Trainer** | Binary ↔ denary, plus two's complement (Higher). Click bits or use the keyboard; instant marking, working shown, score and streak. |
 | **Algorithm Visualiser** | Step or animate through the standard algorithms (linear search, count occurrences, find max/min, running total) with the code line highlighted and variables tracked live. |
-| **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. See below. |
+| **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. Skin the sender and receiver as real apps (chat, email, a login screen, a card payment) while the interceptor's screen stays raw. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
 | **System** | Live Pi health (temp, memory, disk, load, IP), one-click updates from GitHub, and PIN-protected restart / shutdown / exit-to-console. |
@@ -136,6 +136,10 @@ what that screen is, using the buttons at the top:
 Addresses can be an IP (e.g. `192.168.1.42`) or a hostname (e.g.
 `lab-pi-2.local`). Use **Test connections** to check the Pis can see each other.
 
+> Update all the Pis in a set together. A Pi still running an older version
+> will pass messages fine, but drops the app skin, so the receiver falls back
+> to the Classic look.
+
 ### Choosing a cipher
 
 The sender has an **Encryption** chooser so you can walk up the history of
@@ -154,6 +158,32 @@ On the **middle screen**, plaintext shows in full, and classical ciphers get a
 **"Crack it"** button that reveals the message (brute-forcing Caesar, reading
 pigpen off the key card) — showing why they're weak. For modern encryption the
 same button explains it can't be broken without the secret key.
+
+### Making it look like a real app
+
+The sender has an **App** chooser that skins both the sender preview and the
+receiver screen to look like software pupils actually use:
+
+| App | What the sender fills in |
+|-----|--------------------------|
+| **Classic** | one message (the plain ClassPi look) |
+| **Chat (WhatsApp-style / Messenger-style)**, **Text messages** | one message, shown as a bubble thread |
+| **Email client** | subject + message |
+| **Login screen** | username + password |
+| **Card payment** | card number + expiry + security code |
+
+The chosen app travels with the message, so the receiver matches the sender
+automatically (there's an override on the receiver screen if you want it).
+
+The **middle screen is never skinned** — that's the point. Sender and receiver
+see a friendly app; the interceptor sees the raw bytes that actually crossed
+the wire.
+
+> Try **Card payment** with a **Caesar shift**. Classical ciphers only move the
+> letters A–Z, so the card number, expiry and security code travel completely
+> unscrambled — the sharpest demonstration in the whole app of why classical
+> ciphers are useless for real data. (The card details are fake; pupils should
+> never type a real card number.)
 
 ### The teaching beat
 
