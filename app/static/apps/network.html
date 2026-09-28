@@ -71,15 +71,19 @@
   details.note { margin-top: 16px; color: var(--muted); font-size: 15px; }
   summary { cursor: pointer; }
 
-  /* Settings button floating over the app, and the panel it opens. */
-  #infoBtn {
-    position: fixed; top: 14px; right: 16px; z-index: 20;
+  /* Home and settings buttons floating over the app, and the panel it opens. */
+  #homeBtn, #infoBtn {
+    position: fixed; top: 14px; z-index: 20;
     width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
     background: rgba(12, 18, 30, .55); color: #fff; border: 1px solid rgba(255,255,255,.45);
-    font-family: Georgia, serif; font-style: italic; font-size: 20px; font-weight: 700;
+    display: grid; place-items: center; text-decoration: none;
     backdrop-filter: blur(4px);
   }
-  #infoBtn:hover, #infoBtn:focus-visible { background: rgba(12,18,30,.8); outline: none; }
+  #infoBtn { right: 16px; font-family: Georgia, serif; font-style: italic; font-size: 20px; font-weight: 700; }
+  #homeBtn { left: 16px; }
+  #homeBtn svg { width: 21px; height: 21px; }
+  #homeBtn:hover, #homeBtn:focus-visible,
+  #infoBtn:hover, #infoBtn:focus-visible { background: rgba(12,18,30,.85); outline: none; }
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 60; padding: 20px; }
   .modal.open { display: grid; }
   #infoCard { width: min(620px, 96vw); max-height: 90vh; overflow: auto; }
@@ -160,7 +164,10 @@
 <!-- Full-screen app view (sender or receiver, whenever an app theme is on). -->
 <div id="appView" class="hidden"><div id="appRoot"></div></div>
 
-<!-- Settings live here in app/monitor mode, and move inline for Classic. -->
+<!-- The app hides the top bar, so these float over it instead. -->
+<a id="homeBtn" class="hidden" href="/" title="Back to the ClassPi menu" aria-label="Home">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v9h14v-9"/></svg>
+</a>
 <button id="infoBtn" class="hidden" title="Settings (i)" aria-label="Settings">i</button>
 
 <div class="modal" id="infoPanel">
@@ -575,6 +582,8 @@ function applyView() {
   $("monitorMode").classList.toggle("hidden", !showMon);
   // Classic keeps its controls inline; the app hides them behind the i button.
   $("infoBtn").classList.toggle("hidden", showClassic);
+  // The app covers the top bar, so it needs its own way back to the menu.
+  $("homeBtn").classList.toggle("hidden", !showApp);
   placeSettings(showClassic);
   $("animRow").style.display = showClassic ? "" : "none";
   $("monThemeWrap").style.display = role === "receiver" ? "inline-flex" : "none";
@@ -709,17 +718,23 @@ async function pollMonitor() {
   if (sig === monSig) return;
   monSig = sig;
 
-  // A themed receiver draws into the full-screen app; everything else uses
-  // the raw monitor panel.
-  if (role === "receiver" && effTheme !== "classic") {
-    $("appView").classList.remove("hidden");
-    $("chrome").classList.add("hidden");
-    $("pageWrap").classList.add("hidden");
-    $("appRoot").innerHTML = latest
-      ? NetThemes.renderReceiver(effTheme, msgs)
-      : `<div class="nt-app" style="background:#111826;color:#fff"><div class="nt-app-body" style="align-items:center;justify-content:center">
-           <div style="text-align:center;opacity:.75">Waiting for a message...</div></div></div>`;
-    return;
+  // A themed receiver draws into the full-screen app; everything else uses the
+  // raw monitor panel. Auto-match means this can differ from the local theme
+  // chooser, so set the whole chrome/home/app trio here rather than assuming
+  // applyView already got it right.
+  if (role === "receiver") {
+    const themed = effTheme !== "classic";
+    $("appView").classList.toggle("hidden", !themed);
+    $("chrome").classList.toggle("hidden", themed);
+    $("pageWrap").classList.toggle("hidden", themed);
+    $("homeBtn").classList.toggle("hidden", !themed);
+    if (themed) {
+      $("appRoot").innerHTML = latest
+        ? NetThemes.renderReceiver(effTheme, msgs)
+        : `<div class="nt-app" style="background:#111826;color:#fff"><div class="nt-app-body" style="align-items:center;justify-content:center">
+             <div style="text-align:center;opacity:.75">Waiting for a message...</div></div></div>`;
+      return;
+    }
   }
   const box = $("monLatest");
   if (!latest) box.innerHTML = '<div class="muted" style="font-size:22px">Waiting for a message...</div>';
