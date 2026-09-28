@@ -170,7 +170,7 @@ else clutters the screen.
 | App | What you fill in |
 |-----|------------------|
 | **Classic (no app)** | the control view: wire diagram, message box and trace |
-| **Chat (WhatsApp-style / Messenger-style)**, **Text messages** | type and send on a phone; messages stack up as a bubble thread |
+| **Chat (WhatsApp-style)**, **Chat (Messenger-style)**, **Text messages (iMessage-style)** | type and send on a phone, each styled like the real app; messages stack up as a bubble thread |
 | **Email client (Outlook-style)** | opens on a new message, inside a full mail client — ribbon, folder pane and inbox; the receiver reads it in the reading pane |
 | **Website login page** | username + password on a full school-portal site, then Sign in |
 | **Online shop checkout** | card number + expiry + security code in a shop's checkout, then Place your order |

@@ -18,9 +18,6 @@
     .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   // ------------------------------------------------------------ shell pieces
-  function shell(cls, bar, body, compose) {
-    return `<div class="nt-app ${cls}">${bar}<div class="nt-app-body">${body}</div>${compose || ""}</div>`;
-  }
   // Chat apps live on a phone, so draw one: a chat stretched across a 1080p
   // monitor stops looking like the thing pupils actually use.
   const STATUS_ICONS =
@@ -46,10 +43,6 @@
       </div></div>
     </div>`;
   }
-  function bar(title, sub) {
-    return `<div class="nt-bar"><span class="nt-avatar"></span>
-      <div class="nt-bar-t"><b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ""}</div></div>`;
-  }
   function threadBody(msgs, inCls) {
     const rows = msgs.slice(0, 30).reverse().map((m) => {
       const text = m.plain != null ? m.plain : m.payload;
@@ -58,18 +51,16 @@
     return `<div class="nt-thread" data-thread>${rows}</div>` +
       (msgs.length ? "" : `<div class="nt-empty" data-empty>No messages yet</div>`);
   }
-  function bubbleHtml(cls, text, out, time) {
+  function bubbleHtml(cls, text, out, time, ticks) {
     return `<div class="nt-row ${out ? "nt-r" : "nt-l"}"><div class="nt-bubble ${cls}">` +
-      `${esc(text)}<span class="nt-time">${esc(time || "")}${out ? ' <span class="nt-tick">&#10003;&#10003;</span>' : ""}</span>` +
+      `${esc(text)}<span class="nt-time">${esc(time || "")}${out && ticks ? " " + ticks : ""}</span>` +
       `</div></div>`;
   }
-  function chatCompose(live) {
-    return `<div class="nt-compose">
-      <input type="text" class="nt-in" data-field="message" placeholder="Message"
-             autocomplete="off" ${live ? "" : "disabled"}>
-      <button type="button" class="nt-send" ${live ? "data-send" : "disabled"} title="Send">&#10148;</button>
-    </div>`;
-  }
+  const field = (live, ph, cls) =>
+    `<input type="text" class="${cls}" data-field="message" placeholder="${esc(ph)}"
+            autocomplete="off" ${live ? "" : "disabled"}>`;
+  const sendBtn = (live, cls, icon) =>
+    `<button type="button" class="${cls}" ${live ? "data-send" : "disabled"} title="Send">${icon}</button>`;
   // ------------------------------------------------------------ mail chrome
   // A desktop mail client: header, ribbon, folder pane, message list and a
   // reading/compose pane. The furniture is decorative - only the compose
@@ -91,6 +82,20 @@
     draft: "M4 20h16M6 16l10-10 3 3-10 10H6v-3z",
     junk: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM6 6l12 12",
     chev: "M9 6l6 6-6 6",
+    back: "M15 5l-7 7 7 7",
+    video: "M3 7h11v10H3zM14 11l6-3v8l-6-3",
+    phone: "M6 3l3 5-2 2a12 12 0 0 0 5 5l2-2 5 3-1 4a17 17 0 0 1-15-15z",
+    kebab: "M12 6h.01M12 12h.01M12 18h.01",
+    info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 8h.01",
+    smile: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9 10h.01M15 10h.01M8.5 14a5 5 0 0 0 7 0",
+    clip: "M20 11l-8 8a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8",
+    cam: "M3 8h4l2-2h6l2 2h4v11H3zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
+    mic: "M12 4a3 3 0 0 1 3 3v4a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v3",
+    plus: "M12 4v16M4 12h16",
+    image: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6",
+    thumb: "M7 21V10l5-7 1 1-1 5h6a2 2 0 0 1 2 2l-2 8a2 2 0 0 1-2 2z",
+    up: "M12 19V5M6 11l6-6 6 6",
+    apps: "M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z",
   };
   const ic = (n, sz) => `<svg viewBox="0 0 24 24" width="${sz || 18}" height="${sz || 18}" fill="none"
     stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
@@ -204,21 +209,75 @@
     </div>`;
   }
 
-  // A chat theme is the same shell three times over - only the palette differs.
-  function chatTheme(label, cls, title, inCls, outCls) {
+  // Each chat app gets its own header, compose bar and bubble shape - the three
+  // look different enough in real life that a shared shell reads as none of them.
+  function chatTheme(cfg) {
     return {
-      label, cls, fields: null, thread: true, outCls, phone: true,
-      renderSender() { return phoneShell(cls, bar(title, "online"), threadBody([], inCls), chatCompose(true)); },
-      renderReceiver(msgs) { return phoneShell(cls, bar(title, "online"), threadBody(msgs, inCls), chatCompose(false)); },
+      label: cfg.label, cls: cfg.cls, fields: null, thread: true, phone: true,
+      outCls: cfg.outCls,
+      renderSender() {
+        return phoneShell(cfg.cls, cfg.header(), threadBody([], cfg.inCls), cfg.compose(true));
+      },
+      renderReceiver(msgs) {
+        return phoneShell(cfg.cls, cfg.header(), threadBody(msgs, cfg.inCls), cfg.compose(false));
+      },
       noteSent(root, values) {
         const th = root.querySelector("[data-thread]");
         const empty = root.querySelector("[data-empty]");
         if (empty) empty.remove();
-        th.insertAdjacentHTML("beforeend", bubbleHtml(outCls, values[0], true, hhmm()));
+        root.querySelectorAll(".nt-delivered").forEach((el) => el.remove());
+        th.insertAdjacentHTML("beforeend",
+          bubbleHtml(cfg.outCls, values[0], true, hhmm(), cfg.ticks) + (cfg.delivered || ""));
         th.scrollTop = th.scrollHeight;
       },
     };
   }
+
+  const WA_TICKS = '<span class="nt-tick">&#10003;&#10003;</span>';
+
+  const CHATS = {
+    whatsapp: {
+      label: "Chat (WhatsApp-style)", cls: "nt-wa", inCls: "nt-wa-in", outCls: "nt-wa-out",
+      ticks: WA_TICKS,
+      header: () => `<div class="nt-wa-bar">
+        ${ic("back", 22)}<span class="nt-avatar"></span>
+        <div class="nt-bar-t"><b>Class chat</b><span>online</span></div>
+        <span class="nt-wa-acts">${ic("video", 21)}${ic("phone", 19)}${ic("kebab", 20)}</span>
+      </div>`,
+      compose: (live) => `<div class="nt-wa-compose">
+        <div class="nt-wa-pill">${ic("smile", 21)}${field(live, "Message", "nt-in")}
+          ${ic("clip", 20)}${ic("cam", 20)}</div>
+        ${sendBtn(live, "nt-wa-send", ic("up", 21))}
+      </div>`,
+    },
+    messenger: {
+      label: "Chat (Messenger-style)", cls: "nt-msgr", inCls: "nt-msgr-in", outCls: "nt-msgr-out",
+      header: () => `<div class="nt-msgr-bar">
+        ${ic("back", 22)}<span class="nt-avatar"><i class="nt-online"></i></span>
+        <div class="nt-bar-t"><b>Class chat</b><span>Active now</span></div>
+        <span class="nt-msgr-acts">${ic("phone", 20)}${ic("video", 21)}${ic("info", 20)}</span>
+      </div>`,
+      compose: (live) => `<div class="nt-msgr-compose">
+        <span class="nt-msgr-icons">${ic("plus", 21)}${ic("cam", 20)}${ic("image", 20)}${ic("mic", 19)}</span>
+        <div class="nt-msgr-pill">${field(live, "Aa", "nt-in")}${ic("smile", 20)}</div>
+        ${sendBtn(live, "nt-msgr-send", ic("thumb", 21))}
+      </div>`,
+    },
+    sms: {
+      label: "Text messages (iMessage-style)", cls: "nt-sms", inCls: "nt-sms-in", outCls: "nt-sms-out",
+      delivered: '<div class="nt-delivered">Delivered</div>',
+      header: () => `<div class="nt-sms-bar">
+        <span class="nt-sms-back">${ic("back", 24)}</span>
+        <div class="nt-sms-who"><span class="nt-avatar"></span><b>Class chat &rsaquo;</b></div>
+        <span class="nt-sms-acts">${ic("video", 22)}</span>
+      </div>`,
+      compose: (live) => `<div class="nt-sms-compose">
+        ${ic("apps", 21)}
+        <div class="nt-sms-pill">${field(live, "iMessage", "nt-in")}
+          ${sendBtn(live, "nt-sms-send", ic("up", 17))}</div>
+      </div>`,
+    },
+  };
 
   // ------------------------------------------------------------ definitions
   const defs = {
@@ -235,9 +294,9 @@
       },
     },
 
-    whatsapp:  chatTheme("Chat (WhatsApp-style)", "nt-wa", "Class chat", "nt-wa-in", "nt-wa-out"),
-    messenger: chatTheme("Chat (Messenger-style)", "nt-msgr", "Messages", "nt-msgr-in", "nt-msgr-out"),
-    sms:       chatTheme("Text messages (SMS-style)", "nt-sms", "Messages", "nt-sms-in", "nt-sms-out"),
+    whatsapp:  chatTheme(CHATS.whatsapp),
+    messenger: chatTheme(CHATS.messenger),
+    sms:       chatTheme(CHATS.sms),
 
     email: {
       label: "Email client (Outlook-style)",
@@ -492,30 +551,8 @@
 .nt-app { position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 5;
   font-family: system-ui, "Segoe UI", sans-serif; color: #111; }
 .nt-app-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
-.nt-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; color: #fff; flex: 0 0 auto; }
-.nt-bar-t { display: flex; flex-direction: column; line-height: 1.2; }
-.nt-bar-t b { font-size: 18px; }
-.nt-bar-t span { font-size: 13px; opacity: .8; }
-.nt-avatar { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.3); flex: 0 0 34px; }
 
-.nt-thread { flex: 1; min-height: 0; overflow: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 8px; }
-.nt-empty { text-align: center; color: #98a0ad; padding: 30px; font-size: 17px; }
-.nt-row { display: flex; width: 100%; max-width: 900px; margin: 0 auto; }
-.nt-row.nt-l { justify-content: flex-start; }
-.nt-row.nt-r { justify-content: flex-end; }
-.nt-bubble { max-width: 72%; padding: 9px 13px; border-radius: 15px; font-size: 17px; line-height: 1.4;
-  word-break: break-word; box-shadow: 0 1px 1px rgba(0,0,0,.12); }
-.nt-time { display: block; font-size: 11px; opacity: .55; text-align: right; margin-top: 3px; }
-.nt-compose { display: flex; gap: 10px; padding: 12px 16px; align-items: center; flex: 0 0 auto; }
-.nt-compose > * { max-width: 900px; }
-.nt-in { flex: 1; border: 0; border-radius: 999px; padding: 13px 18px; font-size: 17px;
-  background: #fff; color: #111; outline: none; min-width: 0; }
-.nt-in:disabled { opacity: .7; }
-.nt-send { width: 48px; height: 48px; border-radius: 50%; border: 0; cursor: pointer;
-  color: #fff; font-size: 19px; flex: 0 0 48px; }
-.nt-send:disabled { opacity: .45; cursor: default; }
-
-/* --- phone mockup used by the chat apps --- */
+/* --- phone mockup shared by the chat apps --- */
 .nt-stage { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center;
   background: radial-gradient(900px 600px at 20% 0%, #223052 0%, transparent 60%), #0e1320; }
 .nt-phone { position: relative; height: min(860px, calc(100vh - 34px)); aspect-ratio: 390 / 844;
@@ -530,42 +567,103 @@
   width: 34%; height: 26px; border-radius: 15px; background: #0a0c11; }
 .nt-home { flex: 0 0 auto; height: 22px; display: grid; place-items: center; }
 .nt-home::after { content: ""; width: 36%; height: 5px; border-radius: 3px; background: rgba(0,0,0,.35); }
-/* the phone is narrow - tighten the chat furniture to suit */
-.nt-phone .nt-thread { padding: 12px 10px; gap: 6px; }
-.nt-phone .nt-bar { padding: 9px 16px; }
-.nt-phone .nt-bar-t b { font-size: 16px; }
-.nt-phone .nt-avatar { width: 30px; height: 30px; flex-basis: 30px; }
-.nt-phone .nt-compose { padding: 8px 10px; gap: 8px; }
-.nt-phone .nt-in { padding: 10px 14px; font-size: 16px; }
-.nt-phone .nt-send { width: 40px; height: 40px; flex-basis: 40px; font-size: 16px; }
-.nt-phone .nt-bubble { font-size: 16px; max-width: 80%; }
+.nt-bar-t { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; flex: 1; }
+.nt-bar-t b { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-bar-t span { font-size: 12px; opacity: .85; }
+.nt-avatar { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 32px; position: relative;
+  background: linear-gradient(135deg, #b9c6d8, #8fa3bd); }
 
-.nt-wa .nt-bar, .nt-wa .nt-sbar { background: #075e54; color: #fff; }
-.nt-wa .nt-home { background: #f0f0f0; }
-.nt-msgr .nt-bar, .nt-msgr .nt-sbar { background: #0084ff; color: #fff; }
-.nt-msgr .nt-home { background: #f2f3f5; }
-.nt-sms .nt-bar, .nt-sms .nt-sbar { background: #3b3b3d; color: #fff; }
-.nt-sms .nt-home { background: #f6f6f6; }
+.nt-thread { flex: 1; min-height: 0; overflow: auto; padding: 14px 10px; display: flex;
+  flex-direction: column; gap: 3px; }
+.nt-empty { text-align: center; color: #98a0ad; padding: 26px; font-size: 16px; }
+.nt-row { display: flex; width: 100%; }
+.nt-row.nt-l { justify-content: flex-start; }
+.nt-row.nt-r { justify-content: flex-end; }
+.nt-bubble { position: relative; max-width: 78%; padding: 7px 10px 6px; font-size: 16px;
+  line-height: 1.35; word-break: break-word; }
+.nt-time { display: block; font-size: 11px; opacity: .5; text-align: right; margin-top: 2px; }
+.nt-in { flex: 1; border: 0; background: transparent; font-size: 16px; font-family: inherit;
+  color: #111; outline: none; min-width: 0; padding: 0; }
+.nt-in::placeholder { color: #9aa0a6; }
+.nt-in:disabled { opacity: .8; }
+.nt-delivered { align-self: flex-end; font-size: 11px; color: #8e8e93; padding: 2px 4px 0; }
 
-.nt-wa .nt-app-body, .nt-wa .nt-thread { background: #ece5dd; }
-.nt-wa .nt-compose { background: #f0f0f0; }
-.nt-wa .nt-send { background: #25d366; }
-.nt-wa-in { background: #fff; }
-.nt-wa-out { background: #dcf8c6; }
+/* --- WhatsApp-style --- */
+.nt-wa-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; flex: 0 0 auto;
+  background: #008069; color: #fff; }
+.nt-wa-acts { display: inline-flex; align-items: center; gap: 15px; }
+.nt-wa .nt-sbar { background: #008069; color: #fff; }
+/* the cream wallpaper, faintly textured like the real one */
+.nt-wa .nt-thread { background-color: #efeae2;
+  background-image: radial-gradient(circle at 18% 22%, rgba(0,0,0,.028) 2.5px, transparent 3px),
+    radial-gradient(circle at 72% 58%, rgba(0,0,0,.028) 2.5px, transparent 3px),
+    radial-gradient(circle at 42% 84%, rgba(0,0,0,.022) 2px, transparent 2.5px);
+  background-size: 110px 110px, 150px 150px, 90px 90px; }
+.nt-wa-in, .nt-wa-out { border-radius: 8px; box-shadow: 0 1px .5px rgba(11,20,26,.13); }
+.nt-wa-in { background: #fff; border-top-left-radius: 0; margin-left: 8px; }
+.nt-wa-out { background: #d9fdd3; border-top-right-radius: 0; margin-right: 8px; }
+.nt-wa-in::before { content: ""; position: absolute; top: 0; left: -8px;
+  border-top: 9px solid #fff; border-left: 8px solid transparent; }
+.nt-wa-out::after { content: ""; position: absolute; top: 0; right: -8px;
+  border-top: 9px solid #d9fdd3; border-right: 8px solid transparent; }
+.nt-wa .nt-tick { color: #53bdeb; font-size: 12px; }
+.nt-wa-compose { display: flex; align-items: flex-end; gap: 7px; padding: 7px 8px; flex: 0 0 auto;
+  background: #efeae2; }
+.nt-wa-pill { flex: 1; display: flex; align-items: center; gap: 9px; background: #fff;
+  border-radius: 24px; padding: 9px 13px; color: #8696a0; min-width: 0; }
+.nt-wa-send { width: 44px; height: 44px; border-radius: 50%; border: 0; flex: 0 0 44px;
+  background: #00a884; color: #fff; display: grid; place-items: center; cursor: pointer; }
+.nt-wa-send:disabled { opacity: .5; cursor: default; }
+.nt-wa .nt-home { background: #efeae2; }
 
-.nt-msgr .nt-app-body, .nt-msgr .nt-thread { background: #fff; }
-.nt-msgr .nt-compose { background: #f2f3f5; }
-.nt-msgr .nt-in { background: #eceff1; }
-.nt-msgr .nt-send { background: #0084ff; }
-.nt-msgr-in { background: #eceff1; }
+/* --- Messenger-style --- */
+.nt-msgr-bar { display: flex; align-items: center; gap: 10px; padding: 7px 12px; flex: 0 0 auto;
+  background: #fff; color: #050505; border-bottom: 1px solid #eceff1; }
+.nt-msgr-bar > svg:first-child, .nt-msgr-acts { color: #0084ff; }
+.nt-msgr-acts { display: inline-flex; align-items: center; gap: 17px; }
+.nt-msgr .nt-bar-t b { font-size: 15px; }
+.nt-msgr .nt-bar-t span { color: #65676b; font-size: 11px; }
+.nt-online { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px;
+  border-radius: 50%; background: #31a24c; border: 2px solid #fff; }
+.nt-msgr .nt-sbar { background: #fff; color: #050505; }
+.nt-msgr .nt-thread { background: #fff; gap: 2px; }
+.nt-msgr-in, .nt-msgr-out { border-radius: 18px; padding: 8px 12px; }
+.nt-msgr-in { background: #f0f0f0; color: #050505; }
 .nt-msgr-out { background: #0084ff; color: #fff; }
+.nt-msgr-out .nt-time { opacity: .75; }
+.nt-msgr-compose { display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex: 0 0 auto;
+  background: #fff; }
+.nt-msgr-icons { display: inline-flex; align-items: center; gap: 13px; color: #0084ff; flex: 0 0 auto; }
+.nt-msgr-pill { flex: 1; display: flex; align-items: center; gap: 8px; background: #f0f2f5;
+  border-radius: 20px; padding: 8px 12px; color: #65676b; min-width: 0; }
+.nt-msgr-pill .nt-in { background: transparent; }
+.nt-msgr-send { border: 0; background: none; color: #0084ff; cursor: pointer; padding: 0;
+  display: grid; place-items: center; flex: 0 0 auto; }
+.nt-msgr-send:disabled { opacity: .5; cursor: default; }
+.nt-msgr .nt-home { background: #fff; }
 
-.nt-sms .nt-app-body, .nt-sms .nt-thread { background: #fff; }
-.nt-sms .nt-compose { background: #f6f6f6; }
-.nt-sms .nt-in { background: #eceff1; }
-.nt-sms .nt-send { background: #1d8cf8; }
-.nt-sms-in { background: #e9e9eb; }
-.nt-sms-out { background: #1d8cf8; color: #fff; }
+/* --- iMessage-style --- */
+.nt-sms-bar { display: flex; align-items: center; padding: 4px 10px 9px; flex: 0 0 auto;
+  background: #f6f6f6; border-bottom: 1px solid #d8d8dc; color: #007aff; }
+.nt-sms-back { flex: 0 0 34px; }
+.nt-sms-who { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.nt-sms-who .nt-avatar { width: 30px; height: 30px; flex-basis: 30px; }
+.nt-sms-who b { font-size: 12px; color: #000; font-weight: 500; }
+.nt-sms-acts { flex: 0 0 34px; text-align: right; }
+.nt-sms .nt-sbar { background: #f6f6f6; color: #000; }
+.nt-sms .nt-thread { background: #fff; gap: 3px; }
+.nt-sms-in, .nt-sms-out { border-radius: 19px; padding: 8px 13px; }
+.nt-sms-in { background: #e9e9eb; color: #000; border-bottom-left-radius: 5px; }
+.nt-sms-out { background: #1d8cf8; color: #fff; border-bottom-right-radius: 5px; }
+.nt-sms-in .nt-time, .nt-sms-out .nt-time { display: none; }
+.nt-sms-compose { display: flex; align-items: center; gap: 10px; padding: 8px 10px; flex: 0 0 auto;
+  background: #f6f6f6; color: #8e8e93; }
+.nt-sms-pill { flex: 1; display: flex; align-items: center; gap: 8px; background: #fff;
+  border: 1px solid #d3d3d8; border-radius: 19px; padding: 6px 6px 6px 13px; min-width: 0; }
+.nt-sms-send { width: 29px; height: 29px; border-radius: 50%; border: 0; flex: 0 0 29px;
+  background: #1d8cf8; color: #fff; display: grid; place-items: center; cursor: pointer; }
+.nt-sms-send:disabled { background: #c7c7cc; cursor: default; }
+.nt-sms .nt-home { background: #f6f6f6; }
 
 /* --- desktop mail client (Outlook-style layout) --- */
 .nt-mail { background: #f3f3f3; color: #201f1e; font-size: 14px; }
