@@ -172,8 +172,8 @@ else clutters the screen.
 | **Classic (no app)** | the control view: wire diagram, message box and trace |
 | **Chat (WhatsApp-style / Messenger-style)**, **Text messages** | type and send on a phone; messages stack up as a bubble thread |
 | **Email client (Outlook-style)** | opens on a new message, inside a full mail client — ribbon, folder pane and inbox; the receiver reads it in the reading pane |
-| **Login screen** | username + password, then Sign in |
-| **Card payment** | card number + expiry + security code, then Pay |
+| **Website login page** | username + password on a full school-portal site, then Sign in |
+| **Online shop checkout** | card number + expiry + security code in a shop's checkout, then Place your order |
 
 The chosen app travels with the message, so the receiver matches the sender
 automatically (there's an override on the receiver screen if you want it).
@@ -182,11 +182,11 @@ The **middle screen is never skinned** — that's the point. Sender and receiver
 see a friendly app; the interceptor sees the raw bytes that actually crossed
 the wire.
 
-> Try **Card payment** with a **Caesar shift**. Classical ciphers only move the
-> letters A–Z, so the card number, expiry and security code travel completely
-> unscrambled — the sharpest demonstration in the whole app of why classical
-> ciphers are useless for real data. (The card details are fake; pupils should
-> never type a real card number.)
+> Try the **shop checkout** with a **Caesar shift**. Classical ciphers only move
+> the letters A–Z, so the card number, expiry and security code travel
+> completely unscrambled — the sharpest demonstration in the whole app of why
+> classical ciphers are useless for real data. (The card details are fake;
+> pupils should never type a real card number.)
 
 ### The teaching beat
 

@@ -163,6 +163,47 @@
       </div></div>`;
   }
 
+  // ------------------------------------------------------------ website chrome
+  // A whole site rather than a floating card: nav, page content, footer - so
+  // the login looks like somewhere you would really type a password.
+  function site(cls, head, body, foot) {
+    return `<div class="nt-app ${cls}">${head}<div class="nt-site-body">${body}</div>${foot || ""}</div>`;
+  }
+  function siteHead(account) {
+    const links = ["Home", "Courses", "Students", "Staff", "Library", "Contact"]
+      .map((l, i) => `<a class="${i === 2 ? "on" : ""}">${l}</a>`).join("");
+    return `<header class="nt-site-head">
+      <span class="nt-site-brand"><span class="nt-site-mark"></span>Clyde Academy</span>
+      <nav>${links}</nav>
+      <span class="nt-site-acct">${account ? `${esc(account)} &middot; Sign out` : "Sign in"}</span>
+    </header>`;
+  }
+  function siteFoot() {
+    return `<footer class="nt-site-foot">
+      <span>&copy; Clyde Academy</span>
+      <span>Privacy &middot; Accessibility &middot; Acceptable use &middot; Help desk</span>
+    </footer>`;
+  }
+
+  // Online shop: header, department bar, then the checkout columns.
+  function shop(body) {
+    const depts = ["All", "Today's Deals", "Electronics", "Computing", "Books", "Gift Cards", "Sell"]
+      .map((d, i) => `<a class="${i === 0 ? "on" : ""}">${d}</a>`).join("");
+    return `<div class="nt-app nt-bank">
+      <header class="nt-shop-head">
+        <span class="nt-shop-logo">clydemart</span>
+        <span class="nt-shop-to"><small>Deliver to</small>Glasgow G12</span>
+        <span class="nt-shop-search"><input type="text" placeholder="Search clydemart" disabled>
+          <b>${ic("search", 17)}</b></span>
+        <span class="nt-shop-acct"><small>Hello, Ava</small>Account &amp; Lists</span>
+        <span class="nt-shop-acct"><small>Returns</small>&amp; Orders</span>
+        <span class="nt-shop-cart">${ic("inbox", 20)}<i>1</i></span>
+      </header>
+      <div class="nt-shop-nav">${depts}</div>
+      <div class="nt-checkout">${body}</div>
+    </div>`;
+  }
+
   // A chat theme is the same shell three times over - only the palette differs.
   function chatTheme(label, cls, title, inCls, outCls) {
     return {
@@ -255,42 +296,54 @@
     },
 
     login: {
-      label: "Login screen",
+      label: "Website login page",
       cls: "nt-login",
       fields: [
         { id: "username", label: "Username", placeholder: "Username" },
         { id: "password", label: "Password", placeholder: "Password", type: "password" },
       ],
       renderSender() {
-        return shell("nt-login", "", `
-          <div class="nt-card-box">
-            <div class="nt-logo"></div>
-            <h2>Sign in</h2>
-            <p class="nt-sub">Use your school account</p>
-            <label>Username<input type="text" data-field="username" placeholder="Username" autocomplete="off"></label>
-            <label>Password<input type="password" data-field="password" placeholder="Password" autocomplete="off"></label>
-            <button type="button" class="nt-btn nt-block" data-send>Sign in</button>
-            <div class="nt-status" data-status></div>
-          </div>`);
+        return site("nt-login", siteHead(), `
+          <div class="nt-hero">
+            <div class="nt-hero-txt">
+              <h1>Student Portal</h1>
+              <p>Sign in to see your timetable, submit coursework, check results
+                 and message your teachers.</p>
+              <ul class="nt-ticks"><li>Timetable and room changes</li>
+                <li>Submit and track coursework</li><li>Results and reports</li></ul>
+            </div>
+            <div class="nt-signin">
+              <h2>Sign in</h2>
+              <p class="nt-sub">Use your school account</p>
+              <label>Username<input type="text" data-field="username" placeholder="firstname.surname" autocomplete="off"></label>
+              <label>Password<input type="password" data-field="password" placeholder="Password" autocomplete="off"></label>
+              <div class="nt-srow"><span><i class="nt-box"></i> Remember me</span><a>Forgot password?</a></div>
+              <button type="button" class="nt-signin-btn" data-send>Sign in</button>
+              <div class="nt-status" data-status></div>
+              <p class="nt-fine">By signing in you accept the school's acceptable use policy.</p>
+            </div>
+          </div>`, siteFoot());
       },
       renderReceiver(msgs) {
         const m = msgs[0];
         const [user, pass] = splitFor("login", m.plain != null ? m.plain : m.payload);
-        return shell("nt-login", "", `
-          <div class="nt-card-box nt-server">
-            <div class="nt-logo"></div>
-            <h2>Sign-in received</h2>
-            <p class="nt-sub">The server checked these details and let the user in.</p>
-            <div class="nt-kv"><span>Username</span><b>${esc(user)}</b></div>
-            <div class="nt-kv"><span>Password</span><b class="nt-secret">${esc(pass)}</b></div>
-            <div class="nt-ok">&#10003; Signed in</div>
-          </div>`);
+        return site("nt-login", siteHead(esc(user) || "signed in"), `
+          <div class="nt-hero nt-hero-in">
+            <div class="nt-signin nt-wide">
+              <div class="nt-ok">&#10003; Signed in as ${esc(user) || "(no username)"}</div>
+              <h2>What the server received</h2>
+              <p class="nt-sub">The login was checked against the account database and accepted.</p>
+              <div class="nt-kv"><span>Username</span><b>${esc(user)}</b></div>
+              <div class="nt-kv"><span>Password</span><b class="nt-secret">${esc(pass)}</b></div>
+              <p class="nt-note">The login page hid the password behind dots. The network did not.</p>
+            </div>
+          </div>`, siteFoot());
       },
       noteSent(root) { status(root, "Signing in..."); },
     },
 
     banking: {
-      label: "Card payment",
+      label: "Online shop checkout",
       cls: "nt-bank",
       warn: "Demo data only - never type a real card number.",
       fields: [
@@ -299,34 +352,74 @@
         { id: "cvv", label: "Security code", placeholder: "311", max: 4 },
       ],
       renderSender() {
-        return shell("nt-bank", bar("Checkout", "Secure payment"), `
-          <div class="nt-card-box">
-            <div class="nt-total"><span>Total to pay</span><b>&pound;24.99</b></div>
-            <label>Card number<input type="text" data-field="card" maxlength="24" placeholder="4000 1234 5678 9010" autocomplete="off"></label>
-            <div class="nt-two">
-              <label>Expiry<input type="text" data-field="expiry" maxlength="7" placeholder="09/28" autocomplete="off"></label>
-              <label>Security code<input type="text" data-field="cvv" maxlength="4" placeholder="311" autocomplete="off"></label>
-            </div>
-            <button type="button" class="nt-btn nt-block nt-pay" data-send>Pay &pound;24.99</button>
+        return shop(`
+          <div class="nt-co-main">
+            <h1>Checkout</h1>
+            <section class="nt-co-sec">
+              <h3><i>1</i> Delivery address</h3>
+              <p>Ava McLeod<br>14 Kelvin Way, Glasgow, G12 8QQ</p>
+              <a>Change</a>
+            </section>
+            <section class="nt-co-sec nt-co-open">
+              <h3><i>2</i> Payment method</h3>
+              <div class="nt-co-cards"><span class="nt-cbadge">VISA</span><span class="nt-cbadge alt">MC</span>
+                <span class="nt-cbadge alt2">AMEX</span></div>
+              <label>Card number<input type="text" data-field="card" maxlength="24"
+                placeholder="4000 1234 5678 9010" autocomplete="off"></label>
+              <div class="nt-two">
+                <label>Expiry<input type="text" data-field="expiry" maxlength="7" placeholder="09/28" autocomplete="off"></label>
+                <label>Security code<input type="text" data-field="cvv" maxlength="4" placeholder="311" autocomplete="off"></label>
+              </div>
+              <p class="nt-warn">Demo data only - never type a real card number.</p>
+            </section>
+            <section class="nt-co-sec">
+              <h3><i>3</i> Review items and delivery</h3>
+              <div class="nt-co-item"><span class="nt-co-thumb"></span>
+                <div><b>Raspberry Pi 5 starter kit (8GB)</b>
+                  <div class="nt-co-meta">In stock &middot; Sold by ClydeTech</div>
+                  <div class="nt-co-price">&pound;24.99</div></div></div>
+              <div class="nt-co-deliv"><b>Delivery:</b> Tomorrow, free with Prime-style delivery</div>
+            </section>
+          </div>
+          <aside class="nt-co-side">
+            <button type="button" class="nt-place" data-send>Place your order</button>
             <div class="nt-status" data-status></div>
-            <p class="nt-warn">Demo data only - never type a real card number.</p>
-          </div>`);
+            <p class="nt-fine">By placing your order you agree to the shop's terms of sale.</p>
+            <h4>Order Summary</h4>
+            <div class="nt-sum"><span>Items (1)</span><b>&pound;24.99</b></div>
+            <div class="nt-sum"><span>Delivery</span><b>&pound;0.00</b></div>
+            <div class="nt-sum nt-total-row"><span>Order total</span><b>&pound;24.99</b></div>
+          </aside>`);
       },
       renderReceiver(msgs) {
         const m = msgs[0];
         const [num, expiry, cvv] = splitFor("banking", m.plain != null ? m.plain : m.payload);
-        return shell("nt-bank", bar("Checkout", "Payment received"), `
-          <div class="nt-card-box">
-            <div class="nt-plastic">
-              <div class="nt-chip"></div>
-              <div class="nt-num">${esc(num) || "&bull;&bull;&bull;&bull;"}</div>
-              <div class="nt-crow"><span><small>EXPIRES</small>${esc(expiry) || "--/--"}</span>
-                <span><small>SECURITY CODE</small>${esc(cvv) || "---"}</span></div>
-            </div>
-            <div class="nt-ok">&#10003; Payment of &pound;24.99 received</div>
-          </div>`);
+        return shop(`
+          <div class="nt-co-main">
+            <div class="nt-ok">&#10003; Order placed - thank you</div>
+            <section class="nt-co-sec nt-co-open">
+              <h3><i>&#10003;</i> Payment details received</h3>
+              <div class="nt-plastic">
+                <div class="nt-chip"></div>
+                <div class="nt-num">${esc(num) || "&bull;&bull;&bull;&bull;"}</div>
+                <div class="nt-crow"><span><small>EXPIRES</small>${esc(expiry) || "--/--"}</span>
+                  <span><small>SECURITY CODE</small>${esc(cvv) || "---"}</span></div>
+              </div>
+            </section>
+            <section class="nt-co-sec">
+              <h3>Dispatching to</h3>
+              <p>Ava McLeod<br>14 Kelvin Way, Glasgow, G12 8QQ</p>
+            </section>
+          </div>
+          <aside class="nt-co-side">
+            <h4>Order Summary</h4>
+            <div class="nt-sum"><span>Items (1)</span><b>&pound;24.99</b></div>
+            <div class="nt-sum"><span>Delivery</span><b>&pound;0.00</b></div>
+            <div class="nt-sum nt-total-row"><span>Order total</span><b>&pound;24.99</b></div>
+            <p class="nt-fine">A confirmation email is on its way.</p>
+          </aside>`);
       },
-      noteSent(root) { status(root, "Payment sent"); },
+      noteSent(root) { status(root, "Placing your order..."); },
     },
   };
 
@@ -571,41 +664,126 @@
 @media (max-width: 900px) { .nt-ol-nav { display: none; } }
 @media (max-width: 680px) { .nt-ol-list { display: none; } }
 
-.nt-login .nt-app-body { background: linear-gradient(160deg, #eef2f9, #dfe7f5); align-items: center; justify-content: center; }
-.nt-bank .nt-bar { background: #0b3d2c; }
-.nt-bank .nt-app-body { background: #eef2f7; align-items: center; justify-content: center; }
-.nt-card-box { background: #fff; width: min(420px, 92%); border-radius: 16px; padding: 30px 28px;
-  box-shadow: 0 10px 40px rgba(20,30,60,.16); margin: 24px auto; }
-.nt-card-box h2 { margin: 0 0 4px; font-size: 24px; color: #14213d; }
-.nt-sub { margin: 0 0 20px; color: #6b7280; font-size: 15px; }
-.nt-logo { width: 48px; height: 48px; border-radius: 13px; background: linear-gradient(135deg,#4f7df1,#7b4ff1); margin-bottom: 16px; }
-.nt-card-box label { display: block; margin-bottom: 14px; font-size: 13px; color: #6b7280; }
-.nt-card-box input { display: block; width: 100%; margin-top: 5px; border: 1px solid #d5d8dd; border-radius: 9px;
-  padding: 12px 13px; font-size: 17px; font-family: inherit; color: #14213d; background: #fbfcfe; outline: none; }
-.nt-card-box input:focus { border-color: #4f7df1; box-shadow: 0 0 0 3px rgba(79,125,241,.18); }
-.nt-two { display: flex; gap: 12px; }
+/* --- full website (login page) --- */
+.nt-login { background: #f4f6fa; color: #1b2330; font-size: 15px; }
+.nt-site-head { display: flex; align-items: center; gap: 26px; padding: 0 30px; height: 62px;
+  background: #13294b; color: #fff; flex: 0 0 auto; }
+.nt-site-brand { display: flex; align-items: center; gap: 11px; font-size: 18px; font-weight: 700; }
+.nt-site-mark { width: 30px; height: 30px; border-radius: 7px;
+  background: linear-gradient(135deg, #4fd1a5, #5b9dff); }
+.nt-site-head nav { display: flex; gap: 22px; font-size: 14px; }
+.nt-site-head nav a { color: #cfd9e8; cursor: default; padding: 4px 0; }
+.nt-site-head nav a.on { color: #fff; border-bottom: 2px solid #4fd1a5; }
+.nt-site-acct { margin-left: auto; font-size: 14px; color: #cfd9e8; }
+.nt-site-body { flex: 1; min-height: 0; overflow: auto; }
+.nt-hero { display: grid; grid-template-columns: 1.1fr 400px; gap: 46px; align-items: center;
+  max-width: 1080px; margin: 0 auto; padding: 52px 30px; }
+.nt-hero-in { grid-template-columns: 1fr; max-width: 640px; }
+.nt-hero-txt h1 { font-size: 40px; margin: 0 0 14px; letter-spacing: -.5px; }
+.nt-hero-txt p { font-size: 17px; line-height: 1.6; color: #4a5568; margin: 0 0 22px; }
+.nt-ticks { list-style: none; padding: 0; margin: 0; color: #3b4658; }
+.nt-ticks li { padding: 7px 0 7px 28px; position: relative; }
+.nt-ticks li::before { content: "✓"; position: absolute; left: 0; color: #1f9d55; font-weight: 700; }
+.nt-signin { background: #fff; border-radius: 14px; padding: 30px 28px;
+  box-shadow: 0 10px 40px rgba(20,34,64,.13); border: 1px solid #e6eaf1; }
+.nt-signin.nt-wide { margin: 0 auto; }
+.nt-signin h2 { margin: 0 0 4px; font-size: 24px; }
+.nt-signin .nt-sub { margin: 0 0 20px; color: #6b7785; font-size: 14px; }
+.nt-signin label { display: block; margin-bottom: 15px; font-size: 13px; color: #55606f; }
+.nt-signin input { display: block; width: 100%; margin-top: 6px; border: 1px solid #ccd4e0;
+  border-radius: 8px; padding: 12px 13px; font-size: 16px; font-family: inherit; color: #1b2330;
+  background: #fff; outline: none; }
+.nt-signin input:focus { border-color: #13294b; box-shadow: 0 0 0 3px rgba(19,41,75,.13); }
+.nt-srow { display: flex; justify-content: space-between; align-items: center; font-size: 13px;
+  color: #55606f; margin-bottom: 18px; }
+.nt-srow a { color: #1258a8; cursor: default; }
+.nt-box { display: inline-block; width: 13px; height: 13px; border: 1px solid #aab4c2;
+  border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.nt-signin-btn { width: 100%; background: #13294b; color: #fff; border: 0; border-radius: 8px;
+  padding: 13px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.nt-fine { font-size: 12px; color: #8a94a3; margin: 14px 0 0; }
+.nt-note { margin-top: 16px; font-size: 13px; color: #b3261e; }
+.nt-site-foot { display: flex; justify-content: space-between; gap: 20px; padding: 18px 30px;
+  background: #13294b; color: #9fb0c8; font-size: 13px; flex: 0 0 auto; }
+
+/* --- online shop checkout --- */
+.nt-bank { background: #eaeded; color: #0f1111; font-size: 14px; }
+.nt-shop-head { display: flex; align-items: center; gap: 18px; padding: 0 16px; height: 58px;
+  background: #131921; color: #fff; flex: 0 0 auto; }
+.nt-shop-logo { font-size: 21px; font-weight: 800; letter-spacing: -.5px; }
+.nt-shop-logo::after { content: ""; display: block; height: 3px; border-radius: 2px;
+  background: #ff9900; margin-top: -3px; }
+.nt-shop-to, .nt-shop-acct { display: flex; flex-direction: column; line-height: 1.25; font-size: 14px; font-weight: 700; }
+.nt-shop-to small, .nt-shop-acct small { font-size: 11px; font-weight: 400; color: #ccc; }
+.nt-shop-search { flex: 1; display: flex; min-width: 0; }
+.nt-shop-search input { flex: 1; min-width: 0; border: 0; border-radius: 4px 0 0 4px; padding: 9px 12px;
+  font-size: 15px; font-family: inherit; background: #fff; color: #111; }
+.nt-shop-search b { display: grid; place-items: center; width: 44px; background: #febd69;
+  color: #111; border-radius: 0 4px 4px 0; }
+.nt-shop-cart { position: relative; display: flex; align-items: flex-end; font-weight: 700; }
+.nt-shop-cart i { font-style: normal; color: #f08804; font-weight: 800; margin-left: 3px; }
+.nt-shop-nav { display: flex; gap: 18px; padding: 8px 18px; background: #232f3e; color: #fff;
+  font-size: 13px; flex: 0 0 auto; }
+.nt-shop-nav a { cursor: default; }
+.nt-shop-nav a.on { font-weight: 700; }
+.nt-checkout { flex: 1; min-height: 0; overflow: auto; display: grid;
+  grid-template-columns: 1fr 300px; gap: 20px; align-items: start;
+  max-width: 1180px; margin: 0 auto; padding: 22px 20px; width: 100%; }
+.nt-co-main h1 { font-size: 27px; font-weight: 400; margin: 0 0 16px;
+  padding-bottom: 12px; border-bottom: 1px solid #ddd; }
+.nt-co-sec { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; position: relative; }
+.nt-co-sec h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 10px; font-size: 17px; }
+.nt-co-sec h3 i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: #232f3e;
+  color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: 0 0 22px; }
+.nt-co-sec p { margin: 0; line-height: 1.6; }
+.nt-co-sec > a { position: absolute; top: 18px; right: 20px; color: #007185; font-size: 13px; cursor: default; }
+.nt-co-open { border-color: #b8b8b8; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.nt-co-cards { display: flex; gap: 8px; margin-bottom: 14px; }
+.nt-cbadge { font-size: 11px; font-weight: 800; letter-spacing: .5px; color: #fff; background: #1a1f71;
+  border-radius: 3px; padding: 4px 8px; }
+.nt-cbadge.alt { background: #eb001b; }
+.nt-cbadge.alt2 { background: #006fcf; }
+.nt-co-sec label { display: block; margin-bottom: 12px; font-size: 13px; color: #565959; font-weight: 700; }
+.nt-co-sec input { display: block; width: 100%; margin-top: 5px; border: 1px solid #888c8c;
+  border-radius: 4px; padding: 9px 11px; font-size: 15px; font-family: inherit; color: #0f1111;
+  background: #fff; outline: none; box-shadow: inset 0 1px 2px rgba(15,17,17,.12); font-weight: 400; }
+.nt-co-sec input:focus { border-color: #007185; box-shadow: 0 0 3px 2px rgba(0,113,133,.4); }
+.nt-two { display: flex; gap: 14px; }
 .nt-two label { flex: 1; }
-.nt-btn { border: 0; border-radius: 9px; padding: 13px 20px; font-size: 16px; font-weight: 700;
-  cursor: pointer; background: #4f7df1; color: #fff; font-family: inherit; }
-.nt-block { display: block; width: 100%; margin-top: 4px; }
-.nt-primary { background: #1a73e8; }
-.nt-pay { background: #1f9d55; }
-.nt-status { color: #1f9d55; font-size: 14px; min-height: 20px; display: block; margin-top: 10px; text-align: center; }
-.nt-warn { color: #b3261e; font-size: 12px; margin: 14px 0 0; text-align: center; }
-.nt-total { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px;
-  padding-bottom: 14px; border-bottom: 1px solid #e6e8ec; }
-.nt-total span { color: #6b7280; font-size: 14px; }
-.nt-total b { font-size: 26px; color: #14213d; }
-.nt-kv { display: flex; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid #eef0f3; font-size: 16px; }
+.nt-co-item { display: flex; gap: 16px; align-items: flex-start; }
+.nt-co-thumb { width: 74px; height: 74px; border-radius: 6px; flex: 0 0 74px;
+  background: linear-gradient(135deg, #3f4b66, #1f2937); }
+.nt-co-item b { font-size: 15px; }
+.nt-co-meta { color: #565959; font-size: 13px; margin-top: 3px; }
+.nt-co-price { color: #b12704; font-weight: 700; font-size: 16px; margin-top: 5px; }
+.nt-co-deliv { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #007600; }
+.nt-co-side { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px; position: sticky; top: 0; }
+.nt-place { width: 100%; background: #ffd814; border: 1px solid #fcd200; border-radius: 20px;
+  padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; color: #0f1111; }
+.nt-co-side h4 { margin: 16px 0 10px; font-size: 17px; padding-top: 14px; border-top: 1px solid #ddd; }
+.nt-sum { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+.nt-total-row { color: #b12704; font-weight: 700; font-size: 17px; margin-top: 8px;
+  padding-top: 10px; border-top: 1px solid #ddd; }
+.nt-co-side .nt-fine { margin-top: 10px; }
+.nt-ok { background: #e7f6ed; color: #1f7a45; border-radius: 8px; padding: 14px 16px;
+  font-weight: 700; margin-bottom: 14px; }
+.nt-kv { display: flex; justify-content: space-between; gap: 14px; padding: 12px 0;
+  border-bottom: 1px solid #eef0f3; font-size: 16px; }
 .nt-kv span { color: #6b7280; }
 .nt-kv b { color: #14213d; word-break: break-all; }
 .nt-secret { color: #b3261e; font-family: ui-monospace, monospace; }
-.nt-ok { margin-top: 20px; background: #e7f6ed; color: #1f7a45; border-radius: 9px; padding: 13px; text-align: center; font-weight: 700; }
-.nt-plastic { border-radius: 14px; padding: 20px; color: #fff; background: linear-gradient(135deg,#2b3a67,#1b2a4a 60%,#24506b); }
+.nt-warn { color: #b12704; font-size: 12px; margin: 10px 0 0; }
+.nt-plastic { border-radius: 12px; padding: 20px; color: #fff; max-width: 400px;
+  background: linear-gradient(135deg,#2b3a67,#1b2a4a 60%,#24506b); }
 .nt-chip { width: 42px; height: 30px; border-radius: 6px; background: linear-gradient(135deg,#e3c46b,#b8912f); margin-bottom: 18px; }
-.nt-num { font-family: ui-monospace, monospace; font-size: 23px; letter-spacing: 2px; word-break: break-all; }
-.nt-crow { display: flex; gap: 24px; margin-top: 16px; font-family: ui-monospace, monospace; font-size: 16px; }
+.nt-num { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: 2px; word-break: break-all; }
+.nt-crow { display: flex; gap: 24px; margin-top: 16px; font-family: ui-monospace, monospace; font-size: 15px; }
 .nt-crow small { display: block; font-family: inherit; font-size: 10px; letter-spacing: .6px; opacity: .7; margin-bottom: 2px; }
+@media (max-width: 950px) {
+  .nt-hero { grid-template-columns: 1fr; gap: 28px; padding: 28px 20px; }
+  .nt-checkout { grid-template-columns: 1fr; }
+  .nt-site-head nav, .nt-shop-to, .nt-shop-acct { display: none; }
+}
 `;
 
   function injectCss() {
