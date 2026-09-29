@@ -7,5 +7,8 @@
   "port": 8080,
   "net_port": 8090,
   "work_dir": "~/ClassPi-Work",
-  "run_timeout_seconds": 5
+  "run_timeout_seconds": 5,
+  "browser_enabled": true,
+  "browser_search": "https://duckduckgo.com/?kp=1&q=",
+  "wifi_country": "GB"
 }

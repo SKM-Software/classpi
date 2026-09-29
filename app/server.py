@@ -8,6 +8,8 @@ Serves the launcher and classroom apps on 127.0.0.1 and provides a small API:
   /api/quiz            quiz question bank
   /api/system          live Pi stats (temp, CPU, memory, disk, IP)
   /api/system/action   reboot / shutdown / exit kiosk (teacher PIN required)
+  /api/browser         open / close a real Chromium window on the kiosk screen
+  /api/wifi            status, scan, connect / forget (teacher PIN to change)
 """
 import base64
 import concurrent.futures
@@ -18,6 +20,7 @@ import os
 import re
 import resource
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -48,6 +51,19 @@ DEFAULT_CONFIG = {
     "net_port": 8090,
     "net_key": "clyde-kelvin",
     "repo_dir": "",
+    # Web browser tile: a separate Chromium window with a normal address bar.
+    "browser_enabled": True,
+    "browser_search": "https://duckduckgo.com/?kp=1&q=",   # kp=1: strict safe search
+    "browser_links": [
+        {"name": "BBC Bitesize", "url": "https://www.bbc.co.uk/bitesize"},
+        {"name": "SQA", "url": "https://www.sqa.org.uk"},
+        {"name": "W3Schools", "url": "https://www.w3schools.com"},
+        {"name": "Python docs", "url": "https://docs.python.org/3/"},
+        {"name": "Wikipedia", "url": "https://en.wikipedia.org"},
+        {"name": "Scratch", "url": "https://scratch.mit.edu"},
+    ],
+    # Regulatory domain applied when Wi-Fi is switched on from the System app.
+    "wifi_country": "GB",
 }
 
 RUN_OUTPUT_LIMIT = 100_000  # characters
@@ -358,6 +374,11 @@ ACTIONS = {
 }
 
 
+def _pin_ok(payload):
+    """Constant-time teacher PIN check (callers sleep a second on failure)."""
+    return hmac.compare_digest(str(payload.get("pin", "")), str(CONFIG["teacher_pin"]))
+
+
 @app.post("/api/system/action")
 def system_action():
     payload = request.get_json(silent=True) or {}
@@ -375,6 +396,319 @@ def system_action():
     except OSError as exc:
         return jsonify(ok=False, error=str(exc)), 500
     return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------- web browser
+# The kiosk Chromium has no address bar, so the Browser tile starts a second
+# Chromium with its own profile on the same cage display. Cage shows every
+# window maximised with the newest on top, so closing the browser lands back
+# on the launcher. Chromium policies written by install.sh lock it down for a
+# classroom and add a "ClassPi" bookmark that leads back to the start page.
+BROWSER_PROFILE = Path.home() / ".config" / "classpi-browser"
+BROWSER_POLICY = "/etc/chromium/policies/managed/classpi.json"
+_browser = {"proc": None}
+
+
+def _browser_start():
+    return f"http://127.0.0.1:{int(CONFIG['port'])}/browser.html"
+
+
+def _chromium():
+    return shutil.which("chromium") or shutil.which("chromium-browser")
+
+
+def _display_env():
+    """Environment that puts a new window on the kiosk's Wayland display.
+
+    kiosk.sh records cage's socket name in the runtime dir; a kiosk script
+    from before that existed did not, so fall back to the first socket there.
+    """
+    env = dict(os.environ)
+    runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    env["XDG_RUNTIME_DIR"] = runtime
+    display = env.get("WAYLAND_DISPLAY") or _read(Path(runtime) / "classpi-wayland")
+    if not display:
+        socks = sorted(p.name for p in Path(runtime).glob("wayland-*") if not p.name.endswith(".lock"))
+        display = socks[0] if socks else ""
+    if not display:
+        return None
+    env["WAYLAND_DISPLAY"] = display
+    return env
+
+
+def _browser_running():
+    p = _browser["proc"]
+    return p is not None and p.poll() is None
+
+
+@app.get("/api/browser/status")
+def browser_status():
+    return jsonify(
+        ok=True,
+        enabled=bool(CONFIG.get("browser_enabled", True)),
+        running=_browser_running(),
+        chromium=bool(_chromium()),
+        display=_display_env() is not None,
+        locked_down=os.path.exists(BROWSER_POLICY),
+        search=str(CONFIG.get("browser_search") or DEFAULT_CONFIG["browser_search"]),
+        links=[l for l in (CONFIG.get("browser_links") or []) if isinstance(l, dict) and l.get("url")],
+    )
+
+
+@app.post("/api/browser/open")
+def browser_open():
+    if not CONFIG.get("browser_enabled", True):
+        return jsonify(ok=False, error="The web browser is switched off in this Pi's settings."), 403
+    d = request.get_json(silent=True) or {}
+    url = str(d.get("url", "")).strip()
+    if not re.match(r"^https?://", url):
+        url = _browser_start()
+    exe = _chromium()
+    if not exe:
+        return jsonify(ok=False, error="Chromium is not installed on this computer."), 500
+    env = _display_env()
+    if not env:
+        return jsonify(ok=False, error="No screen to open a window on - is the kiosk running?"), 500
+    cmd = [exe, "--ozone-platform=wayland", f"--user-data-dir={BROWSER_PROFILE}",
+           "--no-first-run", "--no-default-browser-check", "--password-store=basic",
+           "--disable-features=TranslateUI", "--check-for-update-interval=31536000",
+           "--start-maximized", "--new-window", url]
+    try:
+        proc = subprocess.Popen(cmd, env=env, start_new_session=True, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    # A second launch just hands its URL to the running browser and exits, so
+    # keep tracking the first process - that is the one to close later.
+    if not _browser_running():
+        _browser["proc"] = proc
+    return jsonify(ok=True, url=url)
+
+
+@app.post("/api/browser/close")
+def browser_close():
+    p = _browser["proc"]
+    if p is not None and p.poll() is None:
+        try:
+            os.killpg(p.pid, signal.SIGTERM)   # the whole tree: renderers, gpu, ...
+        except ProcessLookupError:
+            pass
+    # Also catch a browser left over from before the server last restarted.
+    subprocess.run(["pkill", "-f", f"user-data-dir={BROWSER_PROFILE}"], capture_output=True)
+    _browser["proc"] = None
+    return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------- wi-fi
+# Reading is done here with nmcli as the app user; anything that changes the
+# network goes through the root-owned classpi-wifi helper (sudoers, no password).
+WIFI_HELPER = "/usr/local/sbin/classpi-wifi"
+
+
+def _nmcli(*args, timeout=15):
+    r = subprocess.run(["nmcli", "-t", *args], capture_output=True, text=True, timeout=timeout)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "nmcli failed").strip())
+    return r.stdout
+
+
+def _nm_split(line):
+    """Split one terse nmcli line on ':' - values escape their own ':' as '\\:'."""
+    out, cur, i = [], [], 0
+    while i < len(line):
+        c = line[i]
+        if c == "\\" and i + 1 < len(line):
+            cur.append(line[i + 1])
+            i += 2
+            continue
+        if c == ":":
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur))
+    return out
+
+
+def _rfkill_blocked():
+    """True when the radio is off in software or by a switch. A fresh Pi OS
+    image keeps Wi-Fi blocked until a country has been set."""
+    try:
+        for d in Path("/sys/class/rfkill").iterdir():
+            if _read(d / "type") == "wlan" and (_read(d / "soft") == "1" or _read(d / "hard") == "1"):
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def _wifi_device():
+    for line in _nmcli("-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status").splitlines():
+        f = _nm_split(line)
+        if len(f) >= 4 and f[1] == "wifi":
+            return {"device": f[0], "state": f[2], "profile": f[3]}
+    return None
+
+
+def _saved_networks():
+    """SSIDs with a saved profile (nmcli names profiles after the SSID, but
+    Raspberry Pi Imager's is called 'preconfigured', so look inside each)."""
+    ssids = set()
+    for line in _nmcli("-f", "NAME,TYPE", "connection", "show").splitlines():
+        f = _nm_split(line)
+        if len(f) >= 2 and f[1] == "802-11-wireless":
+            try:
+                ssid = _nmcli("-g", "802-11-wireless.ssid", "connection", "show", f[0]).strip()
+            except (RuntimeError, subprocess.TimeoutExpired):
+                continue
+            ssids.add(ssid.replace("\\:", ":") or f[0])
+    return ssids
+
+
+def _wifi_scan(rescan):
+    fields = ("-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi", "list")
+    try:
+        raw = _nmcli(*fields, "--rescan", "yes" if rescan else "no", timeout=25)
+    except (RuntimeError, subprocess.TimeoutExpired):
+        if not rescan:
+            raise
+        raw = _nmcli(*fields, "--rescan", "no")   # cached results beat nothing
+    nets = {}
+    for line in raw.splitlines():
+        f = _nm_split(line)
+        if len(f) < 4 or not f[1]:
+            continue   # hidden networks have no name to show
+        active, ssid, sec = f[0] == "yes", f[1], f[3].strip()
+        try:
+            signal_pct = int(f[2] or 0)
+        except ValueError:
+            signal_pct = 0
+        prev = nets.get(ssid)
+        if prev and prev["signal"] >= signal_pct and not active:
+            continue   # same network on another access point - keep the strongest
+        sec = "" if sec == "--" else sec
+        nets[ssid] = {"ssid": ssid, "signal": signal_pct, "security": sec, "secure": bool(sec),
+                      "enterprise": "802.1X" in sec, "active": active or bool(prev and prev["active"])}
+    return sorted(nets.values(), key=lambda n: (not n["active"], -n["signal"], n["ssid"].lower()))
+
+
+def _wifi_helper(*args, input_text="", timeout=75):
+    if not os.path.exists(WIFI_HELPER):
+        raise RuntimeError("This Pi was set up before Wi-Fi settings existed - re-run install.sh.")
+    done = subprocess.run(["sudo", "-n", WIFI_HELPER, *args], input=input_text,
+                          capture_output=True, text=True, timeout=timeout)
+    if done.returncode != 0:
+        raise RuntimeError((done.stderr or done.stdout or "Could not change the Wi-Fi").strip())
+    return done.stdout.strip()
+
+
+def _wifi_error(msg):
+    low = msg.lower()
+    if "secrets were required" in low or "no secrets" in low:
+        return "Wrong password (or this network needs a username as well)."
+    if "no network with ssid" in low or "not found" in low:
+        return "Network not found - is it in range, and is the name exactly right?"
+    return msg
+
+
+@app.get("/api/wifi/status")
+def wifi_status():
+    helper = os.path.exists(WIFI_HELPER)
+    if not shutil.which("nmcli"):
+        return jsonify(ok=True, radio="none", available=helper,
+                       error="NetworkManager is not installed on this computer.")
+    try:
+        dev = _wifi_device()
+        if not dev:
+            return jsonify(ok=True, radio="none", available=helper, error="No Wi-Fi hardware found.")
+        if _rfkill_blocked():
+            radio = "blocked"
+        elif _nmcli("radio", "wifi").strip() != "enabled":
+            radio = "off"
+        else:
+            radio = "on"
+        connected = None
+        if dev["state"].startswith("connected"):
+            ip = _nmcli("-g", "IP4.ADDRESS", "device", "show", dev["device"]).strip()
+            ip = ip.split("|")[0].strip().split("/")[0]
+            active = next((n for n in _wifi_scan(rescan=False) if n["active"]), None)
+            connected = {"ssid": active["ssid"] if active else dev["profile"],
+                         "signal": active["signal"] if active else None, "ip": ip}
+        return jsonify(ok=True, radio=radio, device=dev["device"], state=dev["state"],
+                       connected=connected, saved=sorted(_saved_networks(), key=str.lower),
+                       available=helper, country=str(CONFIG.get("wifi_country") or "GB"))
+    except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.post("/api/wifi/scan")
+def wifi_scan():
+    if not shutil.which("nmcli"):
+        return jsonify(ok=False, error="NetworkManager is not installed on this computer."), 500
+    try:
+        nets = _wifi_scan(rescan=True)
+        saved = _saved_networks()
+    except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    for n in nets:
+        n["saved"] = n["ssid"] in saved
+    return jsonify(ok=True, networks=nets)
+
+
+@app.post("/api/wifi/connect")
+def wifi_connect():
+    d = request.get_json(silent=True) or {}
+    if not _pin_ok(d):
+        time.sleep(1)
+        return jsonify(ok=False, error="Wrong PIN"), 403
+    ssid = str(d.get("ssid", "")).strip()[:32]
+    if not ssid:
+        return jsonify(ok=False, error="Enter the network name"), 400
+    # The helper reads these from stdin, one per line, so they never appear
+    # in a process list: the password first, then a username for 802.1X.
+    password = str(d.get("password", "")).replace("\n", "")[:128]
+    username = str(d.get("username", "")).replace("\n", "")[:128]
+    args = ["connect", ssid] + (["hidden"] if d.get("hidden") else [])
+    try:
+        msg = _wifi_helper(*args, input_text=f"{password}\n{username}\n")
+    except subprocess.TimeoutExpired:
+        return jsonify(ok=False, error="Timed out connecting - check the password and try again."), 504
+    except (OSError, RuntimeError) as exc:
+        return jsonify(ok=False, error=_wifi_error(str(exc))), 500
+    return jsonify(ok=True, message=msg, ip=_ip_address())
+
+
+@app.post("/api/wifi/forget")
+def wifi_forget():
+    d = request.get_json(silent=True) or {}
+    if not _pin_ok(d):
+        time.sleep(1)
+        return jsonify(ok=False, error="Wrong PIN"), 403
+    ssid = str(d.get("ssid", "")).strip()[:32]
+    if not ssid:
+        return jsonify(ok=False, error="Enter the network name"), 400
+    try:
+        msg = _wifi_helper("forget", ssid, timeout=30)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    return jsonify(ok=True, message=msg)
+
+
+@app.post("/api/wifi/on")
+def wifi_on():
+    d = request.get_json(silent=True) or {}
+    if not _pin_ok(d):
+        time.sleep(1)
+        return jsonify(ok=False, error="Wrong PIN"), 403
+    country = str(CONFIG.get("wifi_country") or "GB").strip().upper()
+    if not re.match(r"^[A-Z]{2}$", country):
+        country = "GB"
+    try:
+        msg = _wifi_helper("on", country, timeout=40)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+    return jsonify(ok=True, message=msg)
 
 
 # ---------------------------------------------------------------- network lab

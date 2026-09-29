@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClassPi Browser</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  body { display: flex; flex-direction: column; min-height: 100%; }
+  .wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; gap: 28px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #07202c; font-weight: 800; font-size: 15px;
+  }
+  .brand h1 { margin: 0; font-size: 30px; }
+  .brand small { display: block; color: var(--muted); font-size: 15px; font-weight: 400; }
+  form.search { display: flex; gap: 10px; width: min(760px, 100%); }
+  form.search input { flex: 1; font-size: 22px; padding: 16px 20px; border-radius: 14px; }
+  form.search button { font-size: 18px; padding: 0 26px; border-radius: 14px; }
+  .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; width: min(760px, 100%); }
+  .links a {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-weight: 600; text-align: center;
+  }
+  .links a:hover, .links a:focus-visible { border-color: var(--accent); outline: none; }
+  .links .ini {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--panel-2); color: var(--accent-2); font-weight: 800; font-size: 16px;
+  }
+  .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; padding: 18px 24px 28px; color: var(--muted); font-size: 15px; }
+  .foot .btn.primary { font-size: 18px; padding: 12px 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="logo">SKM</div>
+    <h1>ClassPi Browser<small>Search the web, or type a website address</small></h1>
+  </div>
+  <form class="search" id="form" autocomplete="off">
+    <input type="text" id="q" placeholder="Search or type a web address" autofocus>
+    <button class="btn primary" type="submit">Go</button>
+  </form>
+  <div class="links" id="links"></div>
+</div>
+<div class="foot">
+  <button class="btn primary" id="back">&larr; Back to ClassPi</button>
+  <span>Closes the browser and returns to the ClassPi desktop. The <b>ClassPi</b> bookmark and the Home button bring you back to this page.</span>
+</div>
+
+<script>
+// Deliberately not common.js: its Esc-to-home would send this window (a
+// separate browser) to the kiosk launcher instead of back to the desktop.
+const $ = (id) => document.getElementById(id);
+let searchUrl = "https://duckduckgo.com/?kp=1&q=";
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function initials(name) {
+  const w = name.trim().split(/\s+/);
+  return (w.length > 1 ? w[0][0] + w[1][0] : name.slice(0, 2)).toUpperCase();
+}
+
+fetch("/api/browser/status").then((r) => r.json()).then((s) => {
+  if (s.search) searchUrl = s.search;
+  $("links").innerHTML = (s.links || []).map((l) =>
+    `<a href="${escapeHtml(l.url)}"><span class="ini">${escapeHtml(initials(l.name || l.url))}</span>${escapeHtml(l.name || l.url)}</a>`).join("");
+}).catch(() => {});
+
+// "bbc.co.uk/bitesize" is an address; "bbc bitesize" is a search.
+function looksLikeUrl(s) {
+  if (/^https?:\/\//i.test(s)) return true;
+  return !/\s/.test(s) && /^[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/.test(s);
+}
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("q").value.trim();
+  if (!q) return;
+  if (!looksLikeUrl(q)) location.href = searchUrl + encodeURIComponent(q);
+  else location.href = /^https?:\/\//i.test(q) ? q : "https://" + q;
+});
+
+$("back").onclick = async () => {
+  $("back").disabled = true;
+  try {
+    await fetch("/api/browser/close", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  } catch (_) {}
+  // Still here after a moment? Then this page is open inside the kiosk itself.
+  setTimeout(() => { location.href = "/"; }, 1500);
+};
+</script>
+</body>
+</html>

@@ -19,6 +19,23 @@
   .modal.open { display: grid; }
   .modal .panel { width: min(420px, 92vw); }
   .modal input { width: 100%; font-size: 28px; text-align: center; letter-spacing: 8px; font-family: var(--mono); margin: 14px 0; }
+
+  /* Wi-Fi */
+  .net {
+    display: flex; align-items: center; gap: 14px; padding: 10px 14px; margin-top: 8px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2);
+  }
+  .net .sig { color: var(--accent); flex: 0 0 auto; }
+  .net.weak .sig { color: var(--warn); }
+  .net.active { border-color: var(--accent); }
+  .net .name { flex: 1; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .net .name small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; }
+  #wifiModal .panel { width: min(520px, 92vw); }
+  #wifiModal label { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
+  #wifiModal label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 15px; }
+  #wifiModal input { font-size: 18px; text-align: left; letter-spacing: 0; font-family: var(--sans); margin: 4px 0 0; }
+  #wifiModal input[type=checkbox] { width: auto; margin: 0; }
+  #wifiModal #wifiPin { font-family: var(--mono); letter-spacing: 6px; text-align: center; }
 </style>
 </head>
 <body>
@@ -31,6 +48,19 @@
 
 <div class="page">
   <div class="grid" id="stats"></div>
+
+  <div class="panel" style="margin-top:22px" id="wifiPanel">
+    <h2 style="margin-top:0">Wi-Fi <span class="chip">teacher PIN to connect</span></h2>
+    <p class="muted" id="wifiNow">Checking...</p>
+    <div class="power">
+      <button class="btn" id="wifiScan">Scan for networks</button>
+      <button class="btn primary" id="wifiOn" style="display:none">Turn Wi-Fi on</button>
+      <button class="btn" id="wifiOther">Other network...</button>
+      <button class="btn" id="wifiForget" style="display:none">Forget this network</button>
+    </div>
+    <p class="muted" id="wifiMsg" style="min-height:22px;font-size:15px"></p>
+    <div id="wifiList"></div>
+  </div>
 
   <div class="panel" style="margin-top:22px">
     <h2 style="margin-top:0">Software update <span class="chip">teacher PIN to install</span></h2>
@@ -52,6 +82,34 @@
   </div>
 </div>
 
+<div class="modal" id="wifiModal">
+  <div class="panel">
+    <h2 style="margin-top:0" id="wifiTitle">Connect to Wi-Fi</h2>
+    <label for="wifiSsid">Network name</label>
+    <input type="text" id="wifiSsid" maxlength="32" autocomplete="off">
+    <label class="check" id="wifiHiddenRow"><input type="checkbox" id="wifiHidden"> Hidden network (does not show up in scans)</label>
+    <label class="check" id="wifiEntRow"><input type="checkbox" id="wifiEnt"> Needs a username as well (school / enterprise login)</label>
+    <div id="wifiUserRow">
+      <label for="wifiUser">Username</label>
+      <input type="text" id="wifiUser" autocomplete="off">
+    </div>
+    <div id="wifiPassRow">
+      <label for="wifiPass">Password</label>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <input type="password" id="wifiPass" autocomplete="off" style="flex:1">
+        <button class="btn" type="button" id="wifiShow">Show</button>
+      </div>
+    </div>
+    <label for="wifiPin">Teacher PIN</label>
+    <input type="password" id="wifiPin" inputmode="numeric" maxlength="8">
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn primary" id="wifiGo" style="flex:1">Connect</button>
+      <button class="btn" id="wifiCancel">Cancel</button>
+    </div>
+    <p class="muted" id="wifiErr" style="min-height:22px"></p>
+  </div>
+</div>
+
 <div class="modal" id="pinModal">
   <div class="panel">
     <h2 style="margin-top:0" id="pinTitle">Enter teacher PIN</h2>
@@ -68,6 +126,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let pending = null;
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 function fmtUptime(s) {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
@@ -113,6 +173,7 @@ async function confirmPin() {
   if (!pending) return;
   const pin = $("pin").value;
   if (pending === "update") { return confirmUpdate(pin); }
+  if (typeof pending === "object") { return confirmWifi(pin); }
   const labels = { reboot: "Restarting...", shutdown: "Shutting down...", exit_kiosk: "Exiting kiosk..." };
   try {
     await api("/api/system/action", { method: "POST", body: { pin, action: pending } });
@@ -171,6 +232,151 @@ async function confirmUpdate(pin) {
   }
   s.textContent = "The server has not come back yet - check it over SSH (journalctl -u classpi -e).";
 }
+
+// ---- wi-fi ----
+let wifiStatus = null;
+
+function sigBars(pct) {
+  const n = pct >= 75 ? 4 : pct >= 50 ? 3 : pct >= 25 ? 2 : 1;
+  return `<svg class="sig" viewBox="0 0 22 14" width="28" height="18" aria-label="signal ${pct}%">` +
+    [0, 1, 2, 3].map((i) => `<rect x="${i * 6}" y="${14 - (4 + i * 3)}" width="4" height="${4 + i * 3}" rx="1" fill="currentColor" opacity="${i < n ? 1 : .22}"/>`).join("") +
+    `</svg>`;
+}
+
+async function wifiRefresh() {
+  let s;
+  try { s = await api("/api/wifi/status"); }
+  catch (err) { $("wifiNow").textContent = "Could not read the Wi-Fi status: " + err.message; return; }
+  wifiStatus = s;
+  const now = $("wifiNow");
+  $("wifiOn").style.display = "none";
+  $("wifiForget").style.display = "none";
+  if (s.radio === "none") {
+    now.textContent = s.error || "No Wi-Fi hardware found.";
+    ["wifiScan", "wifiOther"].forEach((id) => { $(id).disabled = true; });
+    return;
+  }
+  if (s.radio !== "on") {
+    now.textContent = s.radio === "blocked"
+      ? `Wi-Fi is blocked - usually because no country has been set yet. Turning it on sets the country (${s.country}) and enables the radio.`
+      : "Wi-Fi is switched off.";
+    $("wifiOn").style.display = "";
+  } else if (s.connected) {
+    now.innerHTML = `Connected to <b>${escapeHtml(s.connected.ssid)}</b>` +
+      (s.connected.ip ? ` &middot; address <b>${escapeHtml(s.connected.ip)}</b>` : "") +
+      (s.connected.signal != null ? ` &middot; signal ${s.connected.signal}%` : "");
+    $("wifiForget").style.display = "";
+  } else {
+    now.textContent = "Wi-Fi is on but not connected to a network.";
+  }
+  if (!s.available) {
+    $("wifiMsg").textContent = "This Pi was set up before Wi-Fi settings existed - to connect, run 'sudo bash install.sh' again (see INSTALL.md).";
+  }
+}
+
+async function wifiScanNets() {
+  const btn = $("wifiScan"), list = $("wifiList");
+  btn.disabled = true;
+  $("wifiMsg").textContent = "Scanning - this takes a few seconds...";
+  let r;
+  try { r = await api("/api/wifi/scan", { method: "POST", body: {} }); }
+  catch (err) { $("wifiMsg").textContent = "Could not scan: " + err.message; btn.disabled = false; return; }
+  btn.disabled = false;
+  const n = r.networks.length;
+  $("wifiMsg").textContent = n ? `${n} network${n === 1 ? "" : "s"} in range` : "No networks found - is the Wi-Fi switched on?";
+  list.innerHTML = r.networks.map((net, i) => `
+    <div class="net${net.active ? " active" : ""}${net.signal < 40 ? " weak" : ""}">
+      ${sigBars(net.signal)}
+      <span class="name">${escapeHtml(net.ssid)}<small>${net.secure ? escapeHtml(net.security) : "Open network"}${net.enterprise ? " - needs a username" : ""}${net.saved ? " - saved" : ""}</small></span>
+      ${net.active ? '<span class="chip">connected</span>' : `<button class="btn" data-net="${i}">Connect</button>`}
+    </div>`).join("");
+  list.querySelectorAll("[data-net]").forEach((b) => { b.onclick = () => openWifiModal(r.networks[b.dataset.net]); });
+}
+
+function syncEnt() { $("wifiUserRow").style.display = $("wifiEnt").checked ? "" : "none"; }
+
+function openWifiModal(net) {
+  const manual = !net;
+  $("wifiTitle").textContent = manual ? "Connect to another network" : "Connect to " + net.ssid;
+  $("wifiSsid").value = manual ? "" : net.ssid;
+  $("wifiSsid").readOnly = !manual;
+  $("wifiHiddenRow").style.display = manual ? "" : "none";
+  $("wifiHidden").checked = false;
+  $("wifiEntRow").style.display = manual ? "" : "none";
+  $("wifiEnt").checked = manual ? false : net.enterprise;
+  $("wifiPassRow").style.display = (manual || net.secure) ? "" : "none";
+  $("wifiUser").value = ""; $("wifiPass").value = ""; $("wifiPin").value = "";
+  $("wifiPass").type = "password"; $("wifiShow").textContent = "Show";
+  $("wifiErr").textContent = "";
+  syncEnt();
+  $("wifiModal").classList.add("open");
+  const first = manual ? "wifiSsid" : !net.secure ? "wifiPin" : net.enterprise ? "wifiUser" : "wifiPass";
+  setTimeout(() => $(first).focus(), 50);
+}
+function closeWifi() { $("wifiModal").classList.remove("open"); }
+
+$("wifiGo").onclick = async () => {
+  const body = {
+    ssid: $("wifiSsid").value.trim(),
+    password: $("wifiPassRow").style.display === "none" ? "" : $("wifiPass").value,
+    username: $("wifiEnt").checked ? $("wifiUser").value.trim() : "",
+    hidden: $("wifiHidden").checked,
+    pin: $("wifiPin").value,
+  };
+  if (!body.ssid) { $("wifiErr").textContent = "Enter the network name."; return; }
+  $("wifiGo").disabled = true;
+  $("wifiErr").style.color = "var(--muted)";
+  $("wifiErr").textContent = "Connecting - this can take up to a minute...";
+  try {
+    const r = await api("/api/wifi/connect", { method: "POST", body });
+    $("wifiErr").style.color = "var(--good)";
+    $("wifiErr").textContent = (r.message || "Connected") + (r.ip && r.ip !== "not connected" ? " - address " + r.ip : "");
+    setTimeout(() => { closeWifi(); wifiRefresh(); wifiScanNets(); }, 1500);
+  } catch (err) {
+    $("wifiErr").style.color = "var(--bad)";
+    $("wifiErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
+    if (err.message === "Wrong PIN") { $("wifiPin").value = ""; $("wifiPin").focus(); }
+  }
+  $("wifiGo").disabled = false;
+};
+
+async function confirmWifi(pin) {
+  const p = pending;
+  $("pinErr").style.color = "var(--muted)";
+  $("pinErr").textContent = p.kind === "wifi_on" ? "Turning Wi-Fi on..." : "Forgetting...";
+  try {
+    const r = await api(p.kind === "wifi_on" ? "/api/wifi/on" : "/api/wifi/forget",
+                        { method: "POST", body: { pin, ssid: p.ssid || "" } });
+    $("pinErr").style.color = "var(--good)";
+    $("pinErr").textContent = r.message || "Done";
+    setTimeout(() => { closePin(); wifiRefresh(); }, 1200);
+  } catch (err) {
+    $("pinErr").style.color = "var(--bad)";
+    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
+    $("pin").value = ""; $("pin").focus();
+  }
+}
+
+$("wifiEnt").addEventListener("change", syncEnt);
+$("wifiShow").onclick = () => {
+  const p = $("wifiPass");
+  p.type = p.type === "password" ? "text" : "password";
+  $("wifiShow").textContent = p.type === "password" ? "Show" : "Hide";
+};
+$("wifiCancel").onclick = closeWifi;
+$("wifiModal").querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("wifiGo").click(); }
+  if (e.key === "Escape") { e.stopPropagation(); closeWifi(); }
+}));
+$("wifiScan").onclick = wifiScanNets;
+$("wifiOther").onclick = () => openWifiModal(null);
+$("wifiOn").onclick = () => askPin({ kind: "wifi_on" }, "Turn Wi-Fi on?");
+$("wifiForget").onclick = () => {
+  if (!wifiStatus || !wifiStatus.connected) return;
+  askPin({ kind: "wifi_forget", ssid: wifiStatus.connected.ssid }, `Forget "${wifiStatus.connected.ssid}"?`);
+};
+wifiRefresh();
+setInterval(wifiRefresh, 15000);
 
 document.querySelectorAll("[data-action]").forEach((b) => b.onclick = () => {
   const titles = { reboot: "Restart this Pi?", shutdown: "Shut down this Pi?", exit_kiosk: "Exit to the console (login prompt)?" };

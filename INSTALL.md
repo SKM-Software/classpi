@@ -127,7 +127,7 @@ Keyboard essentials (they're also shown on screen):
 
 | Key | Does |
 |---|---|
-| **1–7** | Open a tool directly, from anywhere |
+| **1–8** | Open a tool directly, from anywhere |
 | **↑ ↓** | Move through the menu |
 | **→ / Enter** | Open a category's submenu; Enter on a tool launches it |
 | **←** | Back out of a submenu |
@@ -140,6 +140,19 @@ GitHub.
 
 ---
 
+## Wi-Fi and the web browser
+
+- **Wi-Fi:** open **System** (key **7**) → **Wi-Fi** → *Scan for networks*,
+  pick one, type the password and the teacher PIN. School networks that also
+  need a username ask for both. If the panel says Wi-Fi is *blocked*, press
+  **Turn Wi-Fi on** — it sets the country (`GB` unless changed in the config)
+  and enables the radio.
+- **Web Browser** (key **8**) opens a real Chromium window on top of ClassPi.
+  Its start page has a search box and a **Back to ClassPi** button; the
+  **ClassPi** bookmark and the Home button always bring you back to it.
+
+---
+
 ## Updating later
 
 - **On the Pi:** System → **Software update** → *Check for updates* →
@@ -147,7 +160,8 @@ GitHub.
 - **Over SSH:** `cd ~/classpi && sudo bash update.sh`
 - If a release note says it changes packages/services/config:
   `cd ~/classpi && git pull && sudo bash install.sh` (Enter through the
-  prompts), then reboot.
+  prompts), then reboot. The Wi-Fi panel and the browser's lockdown are
+  examples — Pis set up before they existed need this once.
 
 ---
 
@@ -187,6 +201,9 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | Receiver stays on *Waiting for a message...* after Send | The sender ran a **Simulation** (see the chip in its top-right corner): its Receiver box was empty, so nothing left the Pi. Open **i** → *Connect real Pis*, pick or type the receiver's address (`10.0.0.3` in the direct cable lab), then **Test connections** and send again. |
 | No internet / updates after a Network Lab lesson | A Pi was left in **Direct cable lab** mode. Open Network Lab → **i** → *Direct cable lab* → **Back to normal**. |
 | "Middle" button greyed out in Direct cable lab | That Pi has only one wired port. The middle Pi needs a USB ethernet adapter so it can bridge two cables. |
+| Wi-Fi panel says the Pi was "set up before Wi-Fi settings existed" | `cd ~/classpi && git pull && sudo bash install.sh` once (Enter through the prompts). |
+| Wi-Fi shows as *blocked* | No country has been set yet. System → **Wi-Fi** → **Turn Wi-Fi on** (teacher PIN). |
+| Browser tile says it could not open | Chromium must be installed and the kiosk running; `journalctl -u classpi -e` shows the reason. |
 | Want the Pi back to normal | `cd ~/classpi && sudo bash uninstall.sh`, then reboot. |
 
 Any other issue: `Ctrl+Alt+F2` always gets you a terminal, and

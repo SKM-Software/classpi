@@ -21,7 +21,8 @@ too.
 | **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. Skin the sender and receiver as real apps (chat, email, a login screen, a card payment) while the interceptor's screen stays raw. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
-| **System** | Live Pi health (temp, memory, disk, load, IP), one-click updates from GitHub, and PIN-protected restart / shutdown / exit-to-console. |
+| **System** | Live Pi health (temp, memory, disk, load, IP), Wi-Fi setup, one-click updates from GitHub, and PIN-protected restart / shutdown / exit-to-console. |
+| **Web Browser** | A real Chromium window — address bar, tabs, back button — opened on top of ClassPi. Locked down for a classroom (no downloads, extensions, dev tools or sign-in; safe search forced) with a **Back to ClassPi** button, a ClassPi bookmark and a Home button that lead back. |
 
 Everything works with **arrow keys + Enter** and number-key shortcuts, and
 **Esc** always returns to the home screen.
@@ -102,6 +103,50 @@ services or configuration, re-run the full installer instead
 (`sudo bash install.sh`) — it keeps the settings you chose the first time, so
 you can just press Enter through the prompts. Re-running the installer is also
 safe any time you're unsure which one an update needs.
+
+---
+
+## The web browser
+
+**Web Browser** (key **8**) opens a normal Chromium window — address bar, tabs,
+back button — on top of ClassPi. The kiosk itself has no address bar, so this
+is a second, separate browser with its own profile. Its start page has a
+search box, a row of quick links and a **Back to ClassPi** button that closes
+it and lands back on the desktop. Chromium's **Home** button and the
+**ClassPi** bookmark on the bookmark bar always return to that start page
+(Ctrl+Shift+W closes the window too).
+
+It is locked down for pupils by Chromium's managed policies, which the
+installer writes: no downloads, extensions, developer tools, incognito or
+Google sign-in; safe search forced on Google and YouTube; `file://` and the
+settings pages blocked. Searches use DuckDuckGo with strict safe search.
+
+In `/etc/classpi/config.json` you can switch the tile off
+(`"browser_enabled": false`), change the search engine (`"browser_search"`,
+e.g. `"https://www.google.com/search?q="`) or replace the quick links
+(`"browser_links": [{"name": "...", "url": "..."}, ...]`). Then
+`sudo systemctl restart classpi`.
+
+> Pis set up before this existed need `sudo bash install.sh` run again once —
+> that writes the lockdown policies. Without them the browser still opens,
+> just without the classroom restrictions or the ClassPi bookmark.
+
+## Connecting to Wi-Fi
+
+**System → Wi-Fi** shows what the Pi is connected to, scans for networks and
+joins one with the teacher PIN. Networks that need a username as well as a
+password (school / enterprise logins) are detected and ask for both; **Other
+network…** handles hidden networks. **Forget this network** drops a saved one.
+
+A freshly imaged Pi keeps its Wi-Fi radio blocked until a country has been
+set; the panel then offers **Turn Wi-Fi on**, which applies `"wifi_country"`
+from the config (default `GB`) and enables the radio.
+
+Wi-Fi and the Network Lab's direct-cable mode go together: a Pi wired to
+another in lab mode keeps its internet through Wi-Fi.
+
+> This too needs `sudo bash install.sh` run once on Pis set up before it
+> existed — it installs the root-side helper the panel uses to connect.
 
 ---
 
@@ -280,7 +325,9 @@ the wire.
 ## Changing things
 
 - **Settings** live in `/etc/classpi/config.json` (device name, teacher PIN,
-  shared key, timeout). Edit, then `sudo systemctl restart classpi`.
+  shared key, timeout, browser search engine and quick links, Wi-Fi country).
+  Edit, then `sudo systemctl restart classpi`. Re-running the installer keeps
+  any keys you add.
 - **Quiz questions:** edit `app/data/quiz.json`, or drop a `ClassPi-Quiz.json`
   file in the pupil work folder to override without touching the install.
 - **Pupil work** is saved in `~/ClassPi-Work` on the Pi.
@@ -316,7 +363,7 @@ classpi/
     ├── requirements.txt
     ├── config.example.json
     ├── data/quiz.json      question bank
-    └── static/             the launcher and the seven apps
+    └── static/             the launcher, the apps and the browser start page
 ```
 
 ## How it works (for the curious)
@@ -325,6 +372,13 @@ classpi/
   `127.0.0.1:8080` and provides the APIs (run code, save files, quiz, system,
   network control). **cage** (a tiny Wayland kiosk) launches **Chromium**
   full-screen pointing at it — no desktop environment needed.
+- **Web Browser** is a second Chromium (own profile, normal UI) that the server
+  starts on cage's Wayland socket. Cage shows every window maximised with the
+  newest on top, so the launcher simply waits underneath until the browser
+  closes. Managed policies in `/etc/chromium/policies/managed/` lock it down.
+- **Wi-Fi** goes through NetworkManager: the server reads status and scans with
+  `nmcli`; connect / forget / radio-on run through a small root helper
+  (`classpi-wifi`) allowed in sudoers, with the password passed on stdin.
 - Pupil Python runs in an isolated subprocess (`python -I`) with CPU, memory and
   file-size limits and a timeout, so a runaway loop can't take the Pi down.
 - The **Network Lab node** (`netnode.py`) listens on `0.0.0.0:8090` so the other

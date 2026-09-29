@@ -41,8 +41,6 @@ DEVICE_NAME="${CLASSPI_NAME:-$(existing device_name)}";   DEVICE_NAME="${DEVICE_
 SCHOOL_NAME="${CLASSPI_SCHOOL:-$(existing school_name)}"; SCHOOL_NAME="${SCHOOL_NAME:-Computing Science}"
 TEACHER_PIN="${CLASSPI_PIN:-$(existing teacher_pin)}";    TEACHER_PIN="${TEACHER_PIN:-1234}"
 NET_KEY="${CLASSPI_NET_KEY:-$(existing net_key)}";        NET_KEY="${NET_KEY:-clyde-kelvin}"
-RUN_TIMEOUT="$(existing run_timeout_seconds)"; [[ "$RUN_TIMEOUT" =~ ^[0-9]+$ ]] || RUN_TIMEOUT=5
-NET_PORT="$(existing net_port)";               [[ "$NET_PORT" =~ ^[0-9]+$ ]] || NET_PORT=8090
 
 if [[ -t 0 ]]; then
   echo
@@ -94,22 +92,37 @@ python3 -m venv "$INSTALL_DIR/venv"
 say "Writing configuration..."
 mkdir -p "$CONFIG_DIR"
 WORK_DIR="$TARGET_HOME/ClassPi-Work"
-# Escape backslashes and double quotes so free-text answers stay valid JSON.
-json_escape() { local s=${1//'\'/'\\'}; s=${s//'"'/'\"'}; printf '%s' "$s"; }
-cat > "$CONFIG_FILE" <<JSON
-{
-  "device_name": "$(json_escape "$DEVICE_NAME")",
-  "school_name": "$(json_escape "$SCHOOL_NAME")",
-  "teacher_pin": "$(json_escape "$TEACHER_PIN")",
-  "net_key": "$(json_escape "$NET_KEY")",
-  "host": "127.0.0.1",
-  "port": 8080,
-  "net_port": $NET_PORT,
-  "work_dir": "$(json_escape "$WORK_DIR")",
-  "run_timeout_seconds": $RUN_TIMEOUT,
-  "repo_dir": "$(json_escape "$SRC_DIR")"
-}
-JSON
+# Merge into the existing file so settings added by hand (browser links, the
+# search engine, Wi-Fi country...) survive a re-run. Values travel through the
+# environment, so free-text answers need no JSON escaping.
+CFG_FILE="$CONFIG_FILE" CFG_NAME="$DEVICE_NAME" CFG_SCHOOL="$SCHOOL_NAME" CFG_PIN="$TEACHER_PIN" \
+CFG_KEY="$NET_KEY" CFG_WORK="$WORK_DIR" CFG_REPO="$SRC_DIR" CFG_COUNTRY="${CLASSPI_WIFI_COUNTRY:-}" \
+python3 - <<'PY'
+import json, os
+e = os.environ
+path = e["CFG_FILE"]
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+    if not isinstance(cfg, dict):
+        cfg = {}
+except (OSError, ValueError):
+    cfg = {}
+cfg.update({
+    "device_name": e["CFG_NAME"], "school_name": e["CFG_SCHOOL"],
+    "teacher_pin": e["CFG_PIN"], "net_key": e["CFG_KEY"],
+    "host": "127.0.0.1", "port": 8080,
+    "work_dir": e["CFG_WORK"], "repo_dir": e["CFG_REPO"],
+})
+cfg.setdefault("net_port", 8090)
+cfg.setdefault("run_timeout_seconds", 5)
+if e["CFG_COUNTRY"]:
+    cfg["wifi_country"] = e["CFG_COUNTRY"].upper()
+cfg.setdefault("wifi_country", "GB")
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PY
 # The services run as $TARGET_USER, so they must be able to read this file;
 # keep it hidden from everyone else (the PIN lives here).
 chown root:"$TARGET_USER" "$CONFIG_FILE"
@@ -196,9 +209,122 @@ esac
 LABNET
 chmod 755 /usr/local/sbin/classpi-labnet
 
+# Wi-Fi changes for the System app. Reading (status, scan) is done by the app
+# itself with nmcli; only these three actions need root. The password arrives
+# on stdin so it never shows in a process list.
+cat > /usr/local/sbin/classpi-wifi <<'WIFI'
+#!/usr/bin/env bash
+# classpi-wifi connect <ssid> [hidden]   stdin: password, then a username (802.1X) - either may be blank
+# classpi-wifi forget <ssid>
+# classpi-wifi on <country>
+set -euo pipefail
+command -v nmcli >/dev/null || { echo "NetworkManager (nmcli) not found."; exit 3; }
+
+wifi_dev() { nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="wifi"{print $1; exit}'; }
+
+# Every saved profile for a network name. nmcli names its own after the SSID,
+# but Raspberry Pi Imager's is called "preconfigured", so look inside each.
+profiles_for() {
+  nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="802-11-wireless"{print $1}' \
+    | while IFS= read -r name; do
+        if [[ "$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null)" == "$1" ]]; then echo "$name"; fi
+      done
+  return 0
+}
+drop_profiles() {
+  profiles_for "$1" | while IFS= read -r name; do nmcli connection delete "$name" >/dev/null 2>&1 || true; done
+}
+
+case "${1:-}" in
+  connect)
+    SSID="${2:-}"; [[ -n "$SSID" ]] || { echo "No network name given."; exit 2; }
+    DEV="$(wifi_dev)"; [[ -n "$DEV" ]] || { echo "No Wi-Fi hardware found."; exit 4; }
+    IFS= read -r PASS || true
+    IFS= read -r IDENT || true
+    HIDDEN=(); [[ "${3:-}" == hidden ]] && HIDDEN=(802-11-wireless.hidden yes)
+    # Start clean, so a corrected password is not shadowed by the old profile.
+    drop_profiles "$SSID"
+    if [[ -n "$IDENT" ]]; then
+      # WPA2-Enterprise with a username and password (PEAP/MSCHAPv2 - the usual school setup).
+      nmcli connection add type wifi con-name "$SSID" ifname "$DEV" ssid "$SSID" ${HIDDEN[@]+"${HIDDEN[@]}"} \
+        wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 \
+        802-1x.identity "$IDENT" 802-1x.password "$PASS" >/dev/null
+    elif [[ -n "$PASS" ]]; then
+      nmcli connection add type wifi con-name "$SSID" ifname "$DEV" ssid "$SSID" ${HIDDEN[@]+"${HIDDEN[@]}"} \
+        wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASS" >/dev/null
+    else
+      nmcli connection add type wifi con-name "$SSID" ifname "$DEV" ssid "$SSID" ${HIDDEN[@]+"${HIDDEN[@]}"} >/dev/null
+    fi
+    if ! OUT="$(nmcli -w 40 connection up "$SSID" 2>&1)"; then
+      nmcli connection delete "$SSID" >/dev/null 2>&1 || true   # leave no broken profile behind
+      echo "$OUT"; exit 6
+    fi
+    echo "Connected to $SSID"
+    ;;
+  forget)
+    SSID="${2:-}"; [[ -n "$SSID" ]] || { echo "No network name given."; exit 2; }
+    drop_profiles "$SSID"
+    echo "Forgot $SSID"
+    ;;
+  on)
+    CC="${2:-}"
+    # A fresh Pi OS image keeps the radio blocked until a country has been set.
+    if [[ "$CC" =~ ^[A-Z]{2}$ ]]; then
+      if command -v raspi-config >/dev/null; then raspi-config nonint do_wifi_country "$CC" >/dev/null 2>&1 || true; fi
+      iw reg set "$CC" >/dev/null 2>&1 || true
+    fi
+    rfkill unblock wifi 2>/dev/null || true
+    nmcli radio wifi on
+    echo "Wi-Fi is on"
+    ;;
+  *) echo "Usage: classpi-wifi connect <ssid> [hidden] | forget <ssid> | on <country>"; exit 2 ;;
+esac
+WIFI
+chmod 755 /usr/local/sbin/classpi-wifi
+
+# Classroom lockdown for the Browser tile, plus a way back: a "ClassPi"
+# bookmark and the Home button both open the start page. Chromium reads these
+# managed policies for every window, including the kiosk (which shows no UI).
+for d in /etc/chromium/policies/managed /etc/chromium-browser/policies/managed; do
+  mkdir -p "$d"
+  cat > "$d/classpi.json" <<'POLICY'
+{
+  "HomepageLocation": "http://127.0.0.1:8080/browser.html",
+  "HomepageIsNewTabPage": false,
+  "NewTabPageLocation": "http://127.0.0.1:8080/browser.html",
+  "ShowHomeButton": true,
+  "BookmarkBarEnabled": true,
+  "ManagedBookmarks": [
+    { "toplevel_name": "ClassPi" },
+    { "name": "ClassPi home", "url": "http://127.0.0.1:8080/browser.html" }
+  ],
+  "DeveloperToolsAvailability": 2,
+  "IncognitoModeAvailability": 1,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "AutofillAddressEnabled": false,
+  "DownloadRestrictions": 3,
+  "ExtensionInstallBlocklist": ["*"],
+  "URLBlocklist": ["file://*", "chrome://settings", "chrome://flags", "chrome://extensions", "chrome://downloads"],
+  "SafeSitesFilterBehavior": 1,
+  "ForceGoogleSafeSearch": true,
+  "ForceYouTubeRestrict": 1,
+  "DefaultNotificationsSetting": 2,
+  "DefaultGeolocationSetting": 2,
+  "DefaultBrowserSettingEnabled": false,
+  "MetricsReportingEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "TranslateEnabled": false,
+  "BackgroundModeEnabled": false
+}
+POLICY
+done
+
 # allow the app to run only these exact power/kiosk/update/network commands without a password
 cat > /etc/sudoers.d/classpi <<SUDO
-$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service, /usr/local/sbin/classpi-apply-update, /usr/local/sbin/classpi-labnet sender, /usr/local/sbin/classpi-labnet middle, /usr/local/sbin/classpi-labnet receiver, /usr/local/sbin/classpi-labnet normal
+$TARGET_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl stop classpi-kiosk.service, /usr/bin/systemctl start getty@tty1.service, /usr/local/sbin/classpi-apply-update, /usr/local/sbin/classpi-labnet sender, /usr/local/sbin/classpi-labnet middle, /usr/local/sbin/classpi-labnet receiver, /usr/local/sbin/classpi-labnet normal, /usr/local/sbin/classpi-wifi connect *, /usr/local/sbin/classpi-wifi forget *, /usr/local/sbin/classpi-wifi on *
 SUDO
 chmod 440 /etc/sudoers.d/classpi
 
@@ -250,6 +376,9 @@ for i in \$(seq 1 30); do
   if curl -sf http://127.0.0.1:8080/api/info >/dev/null 2>&1; then break; fi
   sleep 1
 done
+# Record which Wayland socket this screen is, so the app server can open the
+# web browser window on it.
+printf '%s' "\${WAYLAND_DISPLAY:-}" > "\${XDG_RUNTIME_DIR:-/run/user/$TARGET_UID}/classpi-wayland" 2>/dev/null || true
 # No --incognito: quiz best scores, autosaved code and name lists live in
 # localStorage and should survive a reboot.
 exec $CHROMIUM_BIN \\
@@ -348,6 +477,9 @@ echo "  Device name : $DEVICE_NAME"
 echo "  Hostname    : $NEW_HOST  (reach it at http://$NEW_HOST.local on your network)"
 echo "  Pupil work  : $WORK_DIR"
 echo "  Teacher PIN : $TEACHER_PIN   (change any time in $CONFIG_FILE)"
+echo
+echo "  Web browser : the Browser tile opens Chromium on top of ClassPi (Back to ClassPi closes it)."
+echo "  Wi-Fi       : System > Wi-Fi to join a network (teacher PIN)."
 echo
 echo "  For the Network Lab, install ClassPi on each Pi and wire them together."
 echo "  On the sender's screen open Network Lab and enter the other Pis' addresses."
