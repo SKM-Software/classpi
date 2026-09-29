@@ -890,7 +890,9 @@ def set_lab_mode():
     try:
         done = subprocess.run(["sudo", "-n", LABNET, mode],
                               capture_output=True, text=True, timeout=45)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired:
+        return jsonify(ok=False, error="The network change took too long - check the cable is in, then press the button again."), 504
+    except OSError as exc:
         return jsonify(ok=False, error=str(exc)), 500
     if done.returncode != 0:
         return jsonify(ok=False, error=(done.stderr or done.stdout or "Could not change the network").strip()), 500

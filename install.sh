@@ -201,7 +201,12 @@ case "${1:-}" in
     ;;
   normal)
     drop_ours
-    for d in $(eth_devices); do nmcli device connect "$d" >/dev/null 2>&1 || true; done
+    # -w 0: do not wait for the port to come back up. A Pi still wired to
+    # another Pi has no DHCP server to answer it, and waiting for that to give
+    # up took longer than the app allows - Back to normal looked broken even
+    # though the lab address was already gone. NetworkManager finishes
+    # bringing the port up on its own.
+    for d in $(eth_devices); do nmcli -w 0 device connect "$d" >/dev/null 2>&1 || true; done
     echo "Back on the normal network"
     ;;
   *) echo "Usage: classpi-labnet sender|middle|receiver|normal"; exit 2 ;;
