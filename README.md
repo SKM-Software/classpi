@@ -177,6 +177,12 @@ fixed address (`10.0.0.1`, `.2`, `.3`) so they can talk with no router handing
 out addresses. The middle Pi bridges its two ports so traffic really does pass
 through it. **Back to normal** returns any Pi to the school network.
 
+Setting a Pi as *Sender* also fills in the **Receiver** (`10.0.0.3`) and
+**Middle** (`10.0.0.2`) boxes under *Connect real Pis*, so **Send** goes down
+the cable rather than running the on-screen simulation. The chip in the top
+right says **Live network** when a message really leaves the Pi and
+**Simulation** when it does not.
+
 **The lesson:**
 
 1. Sender → cable → **coupler** → cable → receiver. Leave *Put a Pi in the

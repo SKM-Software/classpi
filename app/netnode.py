@@ -41,15 +41,28 @@ seen = deque(maxlen=50)    # messages this node forwarded (as relay)
 app = Flask(__name__)
 
 
-def _ip():
+LAB_ADDRESSES = ("10.0.0.1", "10.0.0.2", "10.0.0.3")   # sender, middle, receiver
+
+
+def _source_ip(target):
+    """The address this node would send from to reach target (nothing is sent)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("10.255.255.255", 1))
+        s.connect((target, 1))
         return s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return None
     finally:
         s.close()
+
+
+def _ip():
+    # In the direct-cable lab the wired port is never the default route, so
+    # look for the fixed lab address before falling back to the usual one.
+    lab = _source_ip("10.0.0.254")
+    if lab in LAB_ADDRESSES:
+        return lab
+    return _source_ip("10.255.255.255") or "127.0.0.1"
 
 
 @app.get("/whoami")

@@ -232,15 +232,23 @@ def _read(path, default=""):
         return default
 
 
-def _ip_address():
+def _source_ip(target):
+    """The address this Pi would send from to reach target (nothing is sent)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("10.255.255.255", 1))
+        s.connect((target, 1))
         return s.getsockname()[0]
     except OSError:
-        return "not connected"
+        return None
     finally:
         s.close()
+
+
+def _ip_address():
+    # The direct-cable lab port is never the default route (Wi-Fi keeps the
+    # internet), so a default-route lookup alone would report the Wi-Fi
+    # address instead - or nothing at all on an ethernet-only Pi.
+    return _lab_ip() or _source_ip("10.255.255.255") or "not connected"
 
 
 @app.get("/api/system")
@@ -502,7 +510,14 @@ def net_peek():
 
 # ---------------------------------------------------------------- lab network
 LAB_MODES = {"sender": "10.0.0.1", "middle": "10.0.0.2", "receiver": "10.0.0.3"}
+LAB_PROBE = "10.0.0.254"   # any host on the lab subnet (not its broadcast address)
 LABNET = "/usr/local/sbin/classpi-labnet"
+
+
+def _lab_ip():
+    """This Pi's direct-cable address, if classpi-labnet has given it one."""
+    ip = _source_ip(LAB_PROBE)
+    return ip if ip in LAB_MODES.values() else None
 
 
 def _eth_devices():
@@ -517,11 +532,11 @@ def _eth_devices():
 
 @app.get("/api/net/labmode")
 def lab_mode():
-    ip = _ip_address()
-    mode = next((m for m, addr in LAB_MODES.items() if addr == ip), "normal")
+    lab = _lab_ip()
+    mode = next((m for m, addr in LAB_MODES.items() if addr == lab), "normal")
     eths = _eth_devices()
     return jsonify(
-        ok=True, mode=mode, ip=ip, addresses=LAB_MODES,
+        ok=True, mode=mode, ip=lab or _ip_address(), addresses=LAB_MODES,
         eth_count=len(eths), eths=eths,
         available=os.path.exists(LABNET),
     )
