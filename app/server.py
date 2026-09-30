@@ -10,6 +10,7 @@ Serves the launcher and classroom apps on 127.0.0.1 and provides a small API:
   /api/system/action   reboot / shutdown / exit kiosk (teacher PIN required)
   /api/browser         open / close a real Chromium window on the kiosk screen
   /api/wifi            status, scan, connect / forget (teacher PIN to change)
+  /api/internet        online / captive portal (needs sign-in) / offline
 """
 import base64
 import concurrent.futures
@@ -25,8 +26,10 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
+from urllib.parse import urljoin
 
 from flask import Flask, jsonify, request, send_from_directory, abort
 
@@ -457,12 +460,18 @@ def browser_status():
 
 @app.post("/api/browser/open")
 def browser_open():
-    if not CONFIG.get("browser_enabled", True):
-        return jsonify(ok=False, error="The web browser is switched off in this Pi's settings."), 403
     d = request.get_json(silent=True) or {}
-    url = str(d.get("url", "")).strip()
-    if not re.match(r"^https?://", url):
-        url = _browser_start()
+    if d.get("portal") and _net["state"] == "portal":
+        # Signing in to a Wi-Fi portal is the only way this Pi gets online,
+        # so allow it even with the browser tile switched off - but only to
+        # the page the Pi detected itself, not one the caller chose.
+        url = _net["portal_url"] or PORTAL_PROBES[0][0]
+    elif not CONFIG.get("browser_enabled", True):
+        return jsonify(ok=False, error="The web browser is switched off in this Pi's settings."), 403
+    else:
+        url = str(d.get("url", "")).strip()
+        if not re.match(r"^https?://", url):
+            url = _browser_start()
     exe = _chromium()
     if not exe:
         return jsonify(ok=False, error="Chromium is not installed on this computer."), 500
@@ -497,6 +506,80 @@ def browser_close():
     subprocess.run(["pkill", "-f", f"user-data-dir={BROWSER_PROFILE}"], capture_output=True)
     _browser["proc"] = None
     return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------- internet / captive portal
+# Public Wi-Fi (cafes, hotels, Wifinity...) lets the Pi join, then hijacks
+# web traffic until someone accepts terms on a sign-in page. Desktop OSes
+# notice and pop that page up; a kiosk never would. So ask a plain-HTTP URL
+# whose true answer is known: a portal cannot fake it, and usually redirects
+# to its own sign-in page instead, which tells us where to send the browser.
+PORTAL_PROBES = (
+    ("http://connectivitycheck.gstatic.com/generate_204", 204, None),
+    ("http://nmcheck.gnome.org/check_network_status.txt", 200, "NetworkManager is online"),
+)
+_net = {"state": "unknown", "portal_url": None, "at": 0.0, "busy": False}
+_net_lock = threading.Lock()
+
+
+def _probe_internet():
+    """Return (state, portal_url) with state one of online, portal, offline."""
+    if not requests:
+        return "unknown", None
+    for url, want_status, want_text in PORTAL_PROBES:
+        try:
+            r = requests.get(url, allow_redirects=False, timeout=(4, 5),
+                             headers={"Cache-Control": "no-cache"})
+        except requests.RequestException:
+            continue   # blocked or unreachable - try the next probe
+        if r.status_code == want_status and (want_text is None or want_text in r.text):
+            return "online", None
+        if 300 <= r.status_code < 400:
+            loc = urljoin(url, r.headers.get("Location", ""))
+            return "portal", loc if re.match(r"^https?://", loc) else url
+        return "portal", url   # the portal served its own page in place of the answer
+    return "offline", None
+
+
+def _refresh_internet():
+    try:
+        state, portal = _probe_internet()
+    except Exception:   # never let a probe take the flag down with it
+        state, portal = "unknown", None
+    with _net_lock:
+        _net.update(state=state, portal_url=portal, at=time.time(), busy=False)
+
+
+def _internet(max_age=None, wait=0.0):
+    """Cached connectivity state. A stale value starts a probe in the
+    background: behind a portal even a DNS lookup can hang for many seconds,
+    and that must never hold up a page that is only asking."""
+    if max_age is None:
+        max_age = 60 if _net["state"] == "online" else 10
+    with _net_lock:
+        if time.time() - _net["at"] > max_age and not _net["busy"]:
+            _net["busy"] = True
+            threading.Thread(target=_refresh_internet, daemon=True).start()
+    deadline = time.time() + wait
+    while _net["busy"] and time.time() < deadline:
+        time.sleep(0.2)
+    with _net_lock:
+        return dict(_net)
+
+
+def _internet_now(wait=10.0):
+    """A fresh result after the network changed: let any probe already in
+    flight (which may predate the change) finish, then run a new one."""
+    deadline = time.time() + wait
+    while _net["busy"] and time.time() < deadline:
+        time.sleep(0.2)
+    return _internet(max_age=0, wait=max(0.0, deadline - time.time()))
+
+
+@app.get("/api/internet")
+def internet():
+    n = _internet()
+    return jsonify(ok=True, state=n["state"], portal_url=n["portal_url"], checked=int(n["at"]))
 
 
 # ---------------------------------------------------------------- wi-fi
@@ -635,9 +718,11 @@ def wifi_status():
             active = next((n for n in _wifi_scan(rescan=False) if n["active"]), None)
             connected = {"ssid": active["ssid"] if active else dev["profile"],
                          "signal": active["signal"] if active else None, "ip": ip}
+        net = _internet()
         return jsonify(ok=True, radio=radio, device=dev["device"], state=dev["state"],
                        connected=connected, saved=sorted(_saved_networks(), key=str.lower),
-                       available=helper, country=str(CONFIG.get("wifi_country") or "GB"))
+                       available=helper, country=str(CONFIG.get("wifi_country") or "GB"),
+                       internet=net["state"], portal_url=net["portal_url"])
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
         return jsonify(ok=False, error=str(exc)), 500
 
@@ -676,7 +761,9 @@ def wifi_connect():
         return jsonify(ok=False, error="Timed out connecting - check the password and try again."), 504
     except (OSError, RuntimeError) as exc:
         return jsonify(ok=False, error=_wifi_error(str(exc))), 500
-    return jsonify(ok=True, message=msg, ip=_ip_address())
+    net = _internet_now()
+    return jsonify(ok=True, message=msg, ip=_ip_address(),
+                   internet=net["state"], portal_url=net["portal_url"])
 
 
 @app.post("/api/wifi/forget")

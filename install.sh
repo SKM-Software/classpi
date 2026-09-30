@@ -290,6 +290,9 @@ chmod 755 /usr/local/sbin/classpi-wifi
 # Classroom lockdown for the Browser tile, plus a way back: a "ClassPi"
 # bookmark and the Home button both open the start page. Chromium reads these
 # managed policies for every window, including the kiosk (which shows no UI).
+# No SafeSitesFilterBehavior: it asks Google about every page load, the
+# kiosk's own included, and behind a Wi-Fi sign-in portal that question
+# hangs - so the whole ClassPi screen crawled until the portal was signed in.
 for d in /etc/chromium/policies/managed /etc/chromium-browser/policies/managed; do
   mkdir -p "$d"
   cat > "$d/classpi.json" <<'POLICY'
@@ -313,7 +316,6 @@ for d in /etc/chromium/policies/managed /etc/chromium-browser/policies/managed; 
   "DownloadRestrictions": 3,
   "ExtensionInstallBlocklist": ["*"],
   "URLBlocklist": ["file://*", "chrome://settings", "chrome://flags", "chrome://extensions", "chrome://downloads"],
-  "SafeSitesFilterBehavior": 1,
   "ForceGoogleSafeSearch": true,
   "ForceYouTubeRestrict": 1,
   "DefaultNotificationsSetting": 2,

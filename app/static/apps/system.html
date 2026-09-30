@@ -56,6 +56,7 @@
       <button class="btn" id="wifiScan">Scan for networks</button>
       <button class="btn primary" id="wifiOn" style="display:none">Turn Wi-Fi on</button>
       <button class="btn" id="wifiOther">Other network...</button>
+      <button class="btn primary" id="wifiSignin" style="display:none">Sign in to this Wi-Fi</button>
       <button class="btn" id="wifiForget" style="display:none">Forget this network</button>
     </div>
     <p class="muted" id="wifiMsg" style="min-height:22px;font-size:15px"></p>
@@ -251,6 +252,7 @@ async function wifiRefresh() {
   const now = $("wifiNow");
   $("wifiOn").style.display = "none";
   $("wifiForget").style.display = "none";
+  $("wifiSignin").style.display = "none";
   if (s.radio === "none") {
     now.textContent = s.error || "No Wi-Fi hardware found.";
     ["wifiScan", "wifiOther"].forEach((id) => { $(id).disabled = true; });
@@ -265,6 +267,12 @@ async function wifiRefresh() {
     now.innerHTML = `Connected to <b>${escapeHtml(s.connected.ssid)}</b>` +
       (s.connected.ip ? ` &middot; address <b>${escapeHtml(s.connected.ip)}</b>` : "") +
       (s.connected.signal != null ? ` &middot; signal ${s.connected.signal}%` : "");
+    if (s.internet === "portal") {
+      now.innerHTML += `<br><span style="color:var(--warn)">This network needs you to sign in (accept its terms on a web page) before it gives internet access.</span>`;
+      $("wifiSignin").style.display = "";
+    } else if (s.internet === "offline") {
+      now.innerHTML += `<br><span style="color:var(--warn)">Connected, but the internet cannot be reached through this network.</span>`;
+    }
     $("wifiForget").style.display = "";
   } else {
     now.textContent = "Wi-Fi is on but not connected to a network.";
@@ -331,6 +339,11 @@ $("wifiGo").onclick = async () => {
     const r = await api("/api/wifi/connect", { method: "POST", body });
     $("wifiErr").style.color = "var(--good)";
     $("wifiErr").textContent = (r.message || "Connected") + (r.ip && r.ip !== "not connected" ? " - address " + r.ip : "");
+    if (r.internet === "portal") {
+      $("wifiErr").style.color = "var(--warn)";
+      $("wifiErr").textContent = "Connected - this network needs you to sign in. Opening its sign-in page...";
+      setTimeout(openPortal, 800);
+    }
     setTimeout(() => { closeWifi(); wifiRefresh(); wifiScanNets(); }, 1500);
   } catch (err) {
     $("wifiErr").style.color = "var(--bad)";
@@ -356,6 +369,19 @@ async function confirmWifi(pin) {
     $("pin").value = ""; $("pin").focus();
   }
 }
+
+// The sign-in page opens in the Web Browser window; once it is accepted, close
+// the browser (Back to ClassPi, or Ctrl+Shift+W) and the warning clears itself.
+async function openPortal() {
+  $("wifiMsg").textContent = "Opening the sign-in page...";
+  try {
+    await api("/api/browser/open", { method: "POST", body: { portal: true } });
+    $("wifiMsg").textContent = "Sign in on the page that opened, then close the browser to come back here.";
+  } catch (err) {
+    $("wifiMsg").textContent = "Could not open the sign-in page: " + err.message;
+  }
+}
+$("wifiSignin").onclick = openPortal;
 
 $("wifiEnt").addEventListener("change", syncEnt);
 $("wifiShow").onclick = () => {

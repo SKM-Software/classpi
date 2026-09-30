@@ -120,6 +120,10 @@ It is locked down for pupils by Chromium's managed policies, which the
 installer writes: no downloads, extensions, developer tools, incognito or
 Google sign-in; safe search forced on Google and YouTube; `file://` and the
 settings pages blocked. Searches use DuckDuckGo with strict safe search.
+Chromium's own *SafeSites* adult-content filter is deliberately not turned on:
+it checks every page with Google, the ClassPi screens included, and on a
+network that is not fully online that check stalls the whole Pi. Content
+filtering is left to the school network's filter.
 
 In `/etc/classpi/config.json` you can switch the tile off
 (`"browser_enabled": false`), change the search engine (`"browser_search"`,
@@ -137,6 +141,14 @@ e.g. `"https://www.google.com/search?q="`) or replace the quick links
 joins one with the teacher PIN. Networks that need a username as well as a
 password (school / enterprise logins) are detected and ask for both; **Other
 network…** handles hidden networks. **Forget this network** drops a saved one.
+
+**Public Wi-Fi with a sign-in page** (cafes, hotels, holiday parks, Wifinity
+and the like) lets the Pi join but gives no internet until someone accepts the
+terms on a web page. ClassPi checks for this after connecting and opens that
+page in the Web Browser; sign in, close the browser, and you are online. Until
+then the status bar shows **wi-fi sign-in needed**, and **System → Wi-Fi** has
+a **Sign in to this Wi-Fi** button. This works even with the Browser tile
+switched off, but only for the sign-in page the Pi found itself.
 
 A freshly imaged Pi keeps its Wi-Fi radio blocked until a country has been
 set; the panel then offers **Turn Wi-Fi on**, which applies `"wifi_country"`

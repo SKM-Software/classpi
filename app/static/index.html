@@ -48,6 +48,13 @@
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); box-shadow: 0 0 6px var(--good); animation: pulse 2.6s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   .clock b { font-size: 13px; }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  .portal {
+    height: 26px; padding: 0 9px; border-radius: 6px; cursor: pointer;
+    background: color-mix(in srgb, var(--warn) 16%, var(--panel)); border: 1px solid var(--warn);
+    color: var(--warn); font-family: var(--mono); font-size: 12px;
+  }
+  .portal:hover, .portal:focus-visible { outline: none; filter: brightness(1.15); }
 
   /* ------------------------------------------------------------ desktop */
   .desktop {
@@ -230,7 +237,8 @@
   <span class="sep"></span>
   <span class="mod mod-dev"><span class="lbl">node</span><b id="tbDevice">—</b></span>
   <div class="grow"></div>
-  <span class="mod"><i class="dot"></i><b id="tbIp">—</b></span>
+  <button class="portal hidden" id="tbPortal" title="This Wi-Fi needs you to sign in before it gives internet access">wi-fi sign-in needed &rarr;</button>
+  <span class="mod"><i class="dot" id="tbDot"></i><b id="tbIp">—</b></span>
   <span class="sep"></span>
   <span class="mod metric" id="tbCpuMod"><span class="lbl">cpu</span><b id="tbCpu">—</b></span>
   <span class="mod metric" id="tbMemMod"><span class="lbl">mem</span><b id="tbMem">—</b></span>
@@ -613,6 +621,25 @@ function removeApp(action) {
   $("toolCount").textContent = APPS.filter((a) => !a.hidden).length + " tools";
 }
 api("/api/browser/status").then((s) => { if (!s.enabled) removeApp("browser"); }).catch(() => {});
+
+/* ------------------------------------------------------------ wi-fi sign-in */
+// Public Wi-Fi that wants terms accepted on a web page gives no internet until
+// someone does. The server spots it; this puts a button in the status bar.
+async function checkPortal() {
+  let n;
+  try { n = await api("/api/internet"); } catch (_) { return; }
+  const portal = n.state === "portal";
+  $("tbPortal").classList.toggle("hidden", !portal);
+  $("tbDot").classList.toggle("warn", portal);
+}
+$("tbPortal").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  toast("Opening the Wi-Fi sign-in page...");
+  try { await api("/api/browser/open", { method: "POST", body: { portal: true } }); }
+  catch (err) { toast("Could not open the sign-in page: " + err.message, 4000); }
+});
+checkPortal();
+setInterval(checkPortal, 8000);
 </script>
 </body>
 </html>

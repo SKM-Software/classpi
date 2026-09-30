@@ -204,6 +204,7 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | "Middle" button greyed out in Direct cable lab | That Pi has only one wired port. The middle Pi needs a USB ethernet adapter so it can bridge two cables. |
 | Wi-Fi panel says the Pi was "set up before Wi-Fi settings existed" | `cd ~/classpi && git pull && sudo bash install.sh` once (Enter through the prompts). |
 | Wi-Fi shows as *blocked* | No country has been set yet. System → **Wi-Fi** → **Turn Wi-Fi on** (teacher PIN). |
+| Public Wi-Fi joins but no sign-in page appears, and the Pi is very slow | Update with `git pull && sudo bash install.sh`. The sign-in page then opens after connecting (or tap **wi-fi sign-in needed** in the status bar), and the slowness, caused by a browser filter waiting on the internet, goes away. |
 | Browser tile says it could not open | Chromium must be installed and the kiosk running; `journalctl -u classpi -e` shows the reason. |
 | Want the Pi back to normal | `cd ~/classpi && sudo bash uninstall.sh`, then reboot. |
 
