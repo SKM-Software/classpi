@@ -609,10 +609,15 @@ function applyLabAddresses(d) {
 let labMode = "normal";
 function updateAutoRelayUI(d) {
   labMode = d.mode;
-  const auto = d.mode === "sender";
-  $("relayRow").style.display = auto ? "none" : "";
-  $("autoRelayNote").style.display = auto ? "" : "none";
-  if (!auto) return;
+  // The switch disappears on every Pi in the cable lab - routing is decided
+  // on the sender, so on the middle and receiver it never did anything.
+  const inLab = d.mode !== "normal";
+  $("relayRow").style.display = inLab ? "none" : "";
+  $("autoRelayNote").style.display = inLab ? "" : "none";
+  if (d.mode !== "sender") {
+    if (inLab) $("autoRelayState").textContent = "the sender Pi picks the route by itself";
+    return;
+  }
   const up = d.middle_up === true;
   $("autoRelayState").textContent = up
     ? "middle Pi detected - messages route through it"
