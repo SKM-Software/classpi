@@ -14,6 +14,7 @@ Binds to 0.0.0.0 so peers can reach it. Store is in memory only.
 """
 import json
 import os
+import re
 import socket
 import time
 from collections import deque
@@ -100,26 +101,46 @@ def relay():
     forwarded = False
     error = None
     if nxt:
-        try:
-            requests.post(f"http://{nxt}:{PORT}/message",
-                          json={"payload": rec["payload"], "scheme": rec["scheme"],
-                                "params": rec["params"], "theme": rec["theme"],
-                                "from": rec["from"]},
-                          timeout=3)
-            forwarded = True
-        except requests.RequestException as exc:
-            error = str(exc)
+        fwd = {"payload": rec["payload"], "scheme": rec["scheme"], "params": rec["params"],
+               "theme": rec["theme"], "from": rec["from"]}
+        # Two quick attempts with a short timeout. The first packet after a
+        # cable change can be lost while the bridge and ARP settle, and the
+        # sender is waiting on this response - it must come back well inside
+        # the sender's longer timeout rather than racing it (which used to
+        # show a network error on the sender while the message sat here).
+        for attempt in (1, 2):
+            try:
+                requests.post(f"http://{nxt}:{PORT}/message", json=fwd, timeout=2)
+                forwarded, error = True, None
+                break
+            except requests.RequestException as exc:
+                error = str(exc)
+                time.sleep(0.3)
     return jsonify(ok=True, forwarded=forwarded, error=error)
+
+
+# The app skin the sender currently has on screen. Announced ahead of any
+# message so a receiver in "auto" can dress up the moment the sender picks
+# an app, not only after the first message lands.
+announced = {"theme": None}
+
+
+@app.post("/announce")
+def announce():
+    d = request.get_json(silent=True) or {}
+    t = str(d.get("theme", "")).strip().lower()[:24]
+    announced["theme"] = t if re.match(r"^[a-z0-9_-]{1,24}$", t) else None
+    return jsonify(ok=True, theme=announced["theme"])
 
 
 @app.get("/inbox")
 def get_inbox():
-    return jsonify(ok=True, messages=list(inbox))
+    return jsonify(ok=True, messages=list(inbox), theme=announced["theme"])
 
 
 @app.get("/seen")
 def get_seen():
-    return jsonify(ok=True, messages=list(seen))
+    return jsonify(ok=True, messages=list(seen), theme=announced["theme"])
 
 
 @app.post("/clear")

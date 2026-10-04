@@ -891,12 +891,24 @@ def cipher_apply(text, scheme, params, decrypt=False):
     return text
 
 
-def _node(ip, path, method="get", **kw):
+def _node(ip, path, method="get", timeout=3, **kw):
     if not requests:
         raise RuntimeError("The 'requests' library is not installed on this Pi.")
     url = f"http://{ip}:{int(CONFIG['net_port'])}{path}"
     fn = requests.post if method == "post" else requests.get
-    return fn(url, timeout=3, **kw).json()
+    return fn(url, timeout=timeout, **kw).json()
+
+
+def _probe_port(ip, port, timeout=0.5):
+    """True if something is listening - a fast, quiet reachability check."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        return s.connect_ex((str(ip), int(port))) == 0
+    except OSError:
+        return False
+    finally:
+        s.close()
 
 
 @app.post("/api/net/peek")
@@ -956,9 +968,17 @@ def lab_mode():
     lab = _lab_ip()
     mode = next((m for m, addr in LAB_MODES.items() if addr == lab), "normal")
     eths = _eth_devices()
+    # The sender's screen shows (and routes by) what is really plugged in,
+    # so check for the other lab Pis while we are here.
+    middle_up = receiver_up = None
+    if mode == "sender":
+        port = int(CONFIG["net_port"])
+        middle_up = _probe_port(LAB_MODES["middle"], port, 0.35)
+        receiver_up = _probe_port(LAB_MODES["receiver"], port, 0.35)
     return jsonify(
         ok=True, mode=mode, ip=lab or _ip_address(), addresses=LAB_MODES,
         eth_count=len(eths), eths=eths,
+        middle_up=middle_up, receiver_up=receiver_up,
         available=os.path.exists(LABNET),
     )
 
@@ -1028,6 +1048,29 @@ def net_discover():
                 found.append(result)
     found.sort(key=lambda f: (not f["self"], f["hostname"]))
     return jsonify(ok=True, me=me, hostname=socket.gethostname(), port=port, found=found)
+
+
+@app.post("/api/net/announce")
+def net_announce():
+    """Tell the other Pis which app skin the sender has on screen, so a
+    receiver set to 'auto' changes outfit immediately - not only when the
+    next message happens to arrive."""
+    d = request.get_json(silent=True) or {}
+    theme = str(d.get("theme", "classic"))
+    if theme not in NET_THEMES:
+        return jsonify(ok=False, error="Unknown app"), 400
+    ips = [str(i).strip() for i in (d.get("ips") or []) if str(i).strip()][:4]
+    results = {}
+    for ip in ips:
+        if not re.match(r"^[\w.\-]{1,60}$", ip):
+            results[ip] = "invalid address"
+            continue
+        try:
+            _node(ip, "/announce", method="post", timeout=2, json={"theme": theme})
+            results[ip] = "ok"
+        except Exception as exc:
+            results[ip] = str(exc)
+    return jsonify(ok=True, results=results)
 
 
 @app.post("/api/net/clear")
@@ -1110,6 +1153,24 @@ def net_send():
         trace["mode"] = "simulation"
         return jsonify(ok=True, trace=trace)
 
+    # In the direct-cable lab the addresses are fixed, so the route is worked
+    # out here instead of asked for: receiver defaults to the lab receiver,
+    # and the middle Pi is used exactly when one is plugged in and answering.
+    # No switch to flick, and unplugging the middle mid-lesson just works.
+    if _lab_ip() == LAB_MODES["sender"]:
+        port = int(CONFIG["net_port"])
+        receiver = receiver or LAB_MODES["receiver"]
+        if not _probe_port(receiver, port, 0.8):
+            trace["mode"] = "live"
+            return jsonify(ok=False, trace=trace,
+                           error=f"Cannot reach the receiver Pi at {receiver} - check its cable, "
+                                 "and that it is switched on and set up for the lab."), 502
+        relay = LAB_MODES["middle"] if (receiver != LAB_MODES["middle"]
+                                        and _probe_port(LAB_MODES["middle"], port, 0.5)) else ""
+        trace["auto_routed"] = True
+        trace["relay_used"] = relay or None
+        trace["receiver_used"] = receiver
+
     if not receiver:
         return jsonify(ok=False, error="Enter the receiver's address (or use Simulate)"), 400
 
@@ -1117,7 +1178,11 @@ def net_send():
                 "theme": theme, "from": socket.gethostname()}
     try:
         if relay:
-            r = _node(relay, "/relay", method="post", json={**envelope, "next": receiver})
+            # The relay forwards downstream (with its own retries) before it
+            # answers, so wait noticeably longer than it might take - a shared
+            # deadline here used to make the sender time out first and report
+            # a network error for a message that was sitting on the middle Pi.
+            r = _node(relay, "/relay", method="post", timeout=8, json={**envelope, "next": receiver})
             trace["relay_forwarded"] = r.get("forwarded")
             if r.get("error"):
                 trace["relay_error"] = r["error"]

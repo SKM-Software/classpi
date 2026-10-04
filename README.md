@@ -190,6 +190,11 @@ what that screen is, using the buttons at the top:
   **on** and enter both the receiver's and the relay's addresses. The message is
   routed sender → middle → receiver.
 
+Routing is decided entirely on the **sender** — the middle and receiver Pis
+never need the switch, only their role under *This screen*. (In the
+**direct cable lab** even the sender doesn't need it: the middle Pi is
+detected automatically — see below.)
+
 ### Wiring them together (no IP addresses to look up)
 
 On the sender, open the settings (**i**, top-right) → **Connect real Pis**. It
@@ -240,17 +245,23 @@ the cable rather than running the on-screen simulation. The chip in the top
 right says **Live network** when a message really leaves the Pi and
 **Simulation** when it does not.
 
-**The lesson:**
+**The lesson** — no switches to flick; in the cable lab the sender finds the
+other Pis by itself and the settings show what it can see
+(*"no middle Pi - sending direct"* / *"middle Pi detected - messages route
+through it"*):
 
-1. Sender → cable → **coupler** → cable → receiver. Leave *Put a Pi in the
-   middle* off. Send. It arrives. *"These two are talking directly."*
-2. Pull the coupler apart and plug both cables into the middle Pi. Turn *Put a
-   Pi in the middle* on and pick it. Send again — it still arrives, and the
-   middle screen now shows the message.
+1. Sender → cable → **coupler** → cable → receiver. Send. It arrives.
+   *"These two are talking directly."*
+2. Pull the coupler apart and plug both cables into the middle Pi. Within a
+   few seconds the sender notices it — send again and the message now routes
+   through the middle, whose screen shows what it saw. The trace on the
+   sender records the route it took.
 3. Plaintext: the middle reads it. Switch to **AES**: gibberish for the middle,
    perfect for the receiver.
-4. **Switch the middle Pi off.** Nothing arrives at all — proof the traffic
-   genuinely runs through that machine, not just on screen.
+4. **Switch the middle Pi off.** The sender goes back to *no middle Pi* and
+   sends direct — and with the cables still running through the dead middle
+   Pi, nothing arrives at all: proof the traffic genuinely runs through that
+   machine, not just on screen.
 
 > Lab mode takes a Pi off the school network, so there's no internet or software
 > updates until you press **Back to normal**. Put the Pis back on the normal
@@ -301,8 +312,11 @@ else clutters the screen.
 | **Website login page** | username + password on a full school-portal site, then Sign in |
 | **Online shop checkout** | card number + expiry + security code in a shop's checkout, then Place your order |
 
-The chosen app travels with the message, so the receiver matches the sender
-automatically (there's an override on the receiver screen if you want it).
+The sender announces its app to the receiver the moment you pick it, so a
+receiver left on *Auto — match sender* changes outfit straight away — before
+any message is sent (chat apps wait with an empty thread on the phone). The
+app also travels with each message, and there's an override on the receiver
+screen if you want a mismatch on purpose.
 
 The **middle screen is never skinned** — that's the point. Sender and receiver
 see a friendly app; the interceptor sees the raw bytes that actually crossed

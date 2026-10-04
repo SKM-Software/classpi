@@ -235,11 +235,15 @@
   <div class="row cipher-param" id="paramModern" style="display:none">
     <span class="muted" style="font-size:14px">Uses the shared key set when ClassPi was installed. The key never travels with the message.</span>
   </div>
-  <div class="row">
+  <div class="row" id="relayRow">
     <label class="switch" title="Add a middle Pi">
       <input type="checkbox" id="useRelay"><span class="track"></span>
     </label>
     <span>Put a Pi in the middle</span>
+  </div>
+  <div class="row" id="autoRelayNote" style="display:none">
+    <span class="muted" style="font-size:14px">Direct cable lab:
+      <b id="autoRelayState" style="color:var(--text)">checking for a middle Pi...</b></span>
   </div>
   <div class="row" id="animRow">
     <label class="switch" title="Show the animated diagram (Classic only)">
@@ -421,10 +425,10 @@ async function send() {
   busy = true;
   $("sendBtn").disabled = true;
   const inApp = isApp() && role === "sender";
-  const useRelay = $("useRelay").checked;
+  let useRelay = $("useRelay").checked;
   const scheme = $("cipher").value;
-  const receiverIp = $("receiverIp").value.trim();
-  const relayIp = $("relayIp").value.trim();
+  let receiverIp = $("receiverIp").value.trim();
+  let relayIp = $("relayIp").value.trim();
   const live = !!receiverIp;
   $("modeChip").textContent = live ? "Live network" : "Simulation";
   $("ipReceiver").textContent = receiverIp || "another Pi";
@@ -454,6 +458,18 @@ async function send() {
     busy = false; $("sendBtn").disabled = false; return;
   }
 
+  // In the direct-cable lab the server works out the route itself; make the
+  // switch, boxes and diagram tell the same story as what actually happened.
+  if (trace.auto_routed) {
+    useRelay = !!trace.relay_used;
+    relayIp = trace.relay_used || relayIp;
+    receiverIp = trace.receiver_used || receiverIp;
+    $("useRelay").checked = useRelay;
+    $("ipRelay").textContent = trace.relay_used || "none detected";
+    $("ipReceiver").textContent = receiverIp;
+    if (!inApp) positionWires();
+  }
+
   const strong = trace.strength === "modern";
   const tag = trace.strength === "none" ? "plaintext" : strong ? "encrypted (AES)" : "classical cipher";
 
@@ -463,7 +479,7 @@ async function send() {
     NetThemes.noteSent($("appRoot"), themeId(), values);
     NetThemes.clearFields($("appRoot"), themeId());
     renderTrace(trace, useRelay);
-    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "", trace);
     busy = false; $("sendBtn").disabled = false;
     return;
   }
@@ -474,7 +490,7 @@ async function send() {
     $("seenReceiver").textContent = NetThemes.showJoined(trace.receiver_reads);
     $("seenReceiver").parentElement.className = "seen safe";
     renderTrace(trace, useRelay);
-    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+    if (live) await pollPeers(receiverIp, useRelay ? relayIp : "", trace);
     busy = false; $("sendBtn").disabled = false; return;
   }
 
@@ -507,7 +523,7 @@ async function send() {
   $("bReceiver").classList.remove("active");
 
   renderTrace(trace, useRelay);
-  if (live) await pollPeers(receiverIp, useRelay ? relayIp : "");
+  if (live) await pollPeers(receiverIp, useRelay ? relayIp : "", trace);
   busy = false; $("sendBtn").disabled = false;
 }
 
@@ -522,6 +538,11 @@ function renderTrace(t, useRelay) {
     ["Cipher", escapeHtml(t.scheme_label) + " (" + strengthLabel + ")", ""],
     ["Travelling on the wire", wireHtml(t.on_wire, t.scheme, 20), t.strength === "modern" ? "safe" : t.strength === "classical" ? "warn" : ""],
   );
+  if (t.auto_routed) {
+    rows.push(["Route (direct cable lab)",
+      t.relay_used ? "middle Pi detected at " + escapeHtml(t.relay_used) + " - routed through it"
+                   : "no middle Pi detected - sent straight to the receiver", ""]);
+  }
   if (useRelay) {
     let v, cls;
     if (t.strength === "none") { v = escapeHtml(NetThemes.showRaw(t.relay_can_read)); cls = "leak"; }
@@ -529,17 +550,29 @@ function renderTrace(t, useRelay) {
     else { v = "scrambled - but can be cracked"; cls = "warn"; }
     rows.push(["Middle Pi could read", v, cls]);
   }
+  if (t.relay_forwarded === false) {
+    rows.push(["Middle Pi", "could not pass it on to the receiver - check the receiver's cable. ("
+      + escapeHtml(t.relay_error || "no answer") + ")", "leak"]);
+  }
   rows.push(["Receiver reads", escapeHtml(NetThemes.showJoined(t.receiver_reads)), "safe"]);
   $("trace").innerHTML = rows.map(([k, v, cls]) =>
     `<div><span class="k">${k}</span><br><span class="${cls}">${v}</span></div>`).join("");
 }
 
-async function pollPeers(receiverIp, relayIp) {
-  try {
-    const inbox = await api("/api/net/peek", { method: "POST", body: { ip: receiverIp, kind: "inbox" } });
-    const m = inbox.messages && inbox.messages[0];
-    if (m) $("seenReceiver").textContent = NetThemes.showJoined(m.plain != null ? m.plain : m.payload);
-  } catch (_) {}
+async function pollPeers(receiverIp, relayIp, trace) {
+  // The relay may still be mid-forward when this starts, so look a few
+  // times for OUR message (matched by payload) rather than once for any.
+  for (let i = 0; i < 4; i++) {
+    try {
+      const inbox = await api("/api/net/peek", { method: "POST", body: { ip: receiverIp, kind: "inbox" } });
+      const m = (inbox.messages || [])[0];
+      if (m && (!trace || m.payload === trace.delivered_payload)) {
+        $("seenReceiver").textContent = NetThemes.showJoined(m.plain != null ? m.plain : m.payload);
+        break;
+      }
+    } catch (_) {}
+    await sleep(700);
+  }
   if (relayIp) {
     try {
       const seen = await api("/api/net/peek", { method: "POST", body: { ip: relayIp, kind: "seen", as_middle: true } });
@@ -570,6 +603,41 @@ function applyLabAddresses(d) {
   saveAddresses();
 }
 
+// In the lab, the middle Pi is found by looking, not by flicking a switch:
+// the server probes 10.0.0.2 and this keeps the switch, wires and status
+// line matching whatever is actually plugged in right now.
+let labMode = "normal";
+function updateAutoRelayUI(d) {
+  labMode = d.mode;
+  const auto = d.mode === "sender";
+  $("relayRow").style.display = auto ? "none" : "";
+  $("autoRelayNote").style.display = auto ? "" : "none";
+  if (!auto) return;
+  const up = d.middle_up === true;
+  $("autoRelayState").textContent = up
+    ? "middle Pi detected - messages route through it"
+    : (d.receiver_up === false ? "no other Pis answering yet - check the cables"
+                               : "no middle Pi - sending direct");
+  if ($("useRelay").checked !== up) {
+    $("useRelay").checked = up;
+    positionWires();
+  }
+}
+
+// Keep that live while the sender screen is up - the whole lesson is
+// plugging and unplugging cables, so the screen should follow along.
+let labWatch = null;
+function syncLabWatch() {
+  const want = role === "sender";
+  if (want && !labWatch) {
+    labWatch = setInterval(async () => {
+      try { updateAutoRelayUI(await api("/api/net/labmode")); } catch (_) {}
+    }, 4000);
+  } else if (!want && labWatch) {
+    clearInterval(labWatch); labWatch = null;
+  }
+}
+
 async function refreshLab() {
   let d;
   try { d = await api("/api/net/labmode"); }
@@ -578,6 +646,7 @@ async function refreshLab() {
     ? `This Pi is on the <b>normal network</b> at <b>${escapeHtml(d.ip)}</b>`
     : `This Pi is set as <b>${escapeHtml(LAB_NAME[d.mode])}</b> at <b>${escapeHtml(d.ip)}</b>`;
   applyLabAddresses(d);
+  updateAutoRelayUI(d);
   // The middle Pi needs a second port to bridge across.
   const canBridge = d.eth_count >= 2;
   $("labMiddle").disabled = !canBridge;
@@ -637,6 +706,8 @@ try {
   if (saved.relay) $("relayIp").value = saved.relay;
 } catch (_) {}
 ["receiverIp", "relayIp"].forEach((id) => $(id).addEventListener("change", saveAddresses));
+// A newly paired receiver should dress up straight away too.
+$("receiverIp").addEventListener("change", announceTheme);
 
 // ---- finding the other Pis ----
 let scanned = false;
@@ -796,11 +867,27 @@ function applyView() {
 
   if (showApp && role === "sender") NetThemes.mountSender($("appRoot"), themeId(), send);
   if (showClassic) { positionWires(); setTimeout(positionWires, 60); }
+  syncLabWatch();
   monSig = "";   // force the monitor/receiver to redraw into its new home
+}
+
+// Tell the receiver which app this sender has on screen, so a receiver set
+// to "auto" changes outfit now rather than on the next message.
+let announceT = null;
+function announceTheme() {
+  if (role !== "sender") return;
+  clearTimeout(announceT);
+  announceT = setTimeout(async () => {
+    const ip = $("receiverIp").value.trim();
+    if (!ip) return;
+    try { await api("/api/net/announce", { method: "POST", body: { ips: [ip], theme: themeId() } }); }
+    catch (_) {}
+  }, 250);
 }
 
 function updateThemeUI() {
   try { localStorage.setItem("classpi-net-theme", themeId()); } catch (_) {}
+  announceTheme();
   applyView();
 }
 $("theme").addEventListener("change", updateThemeUI);
@@ -914,10 +1001,14 @@ async function pollMonitor() {
   const msgs = data.messages || [];
   const latest = msgs[0];
   crackPlain = latest ? latest.plain : null;
-  // The receiver matches the sender's app unless the teacher overrides it here.
+  // The receiver matches the sender's app unless the teacher overrides it
+  // here. The sender announces its choice ahead of any message (data.theme),
+  // so "auto" follows a theme change on the sender straight away; the latest
+  // message's theme covers senders from before announcements existed.
   const pick = $("monTheme").value;
+  const announcedTheme = (data.theme && NetThemes.defs[data.theme]) ? data.theme : null;
   const effTheme = role === "middle" ? "raw"
-    : (pick === "auto" ? ((latest && latest.theme) || "classic") : pick);
+    : (pick === "auto" ? (announcedTheme || (latest && latest.theme) || "classic") : pick);
   // Only redraw when something actually changed, so a revealed crack stays put.
   const sig = JSON.stringify(msgs.map((m) => [m.at, m.scheme, m.payload, m.theme])) + "|" + effTheme;
   if (sig === monSig) return;
@@ -934,10 +1025,17 @@ async function pollMonitor() {
     $("pageWrap").classList.toggle("hidden", themed);
     $("homeBtn").classList.toggle("hidden", !themed);
     if (themed) {
+      // Chat apps have a natural empty state (an empty thread on the phone),
+      // so show the real app while waiting; form-style apps need a message
+      // to display, so they get a labelled waiting screen instead.
+      const def = NetThemes.get(effTheme);
       $("appRoot").innerHTML = latest
         ? NetThemes.renderReceiver(effTheme, msgs)
-        : `<div class="nt-app" style="background:#111826;color:#fff"><div class="nt-app-body" style="align-items:center;justify-content:center">
-             <div style="text-align:center;opacity:.75">Waiting for a message...</div></div></div>`;
+        : (def.thread
+            ? NetThemes.renderReceiver(effTheme, [])
+            : `<div class="nt-app" style="background:#111826;color:#fff"><div class="nt-app-body" style="align-items:center;justify-content:center">
+                 <div style="text-align:center;opacity:.75">${NetThemes.esc(def.label)}<br>
+                 <span style="font-size:14px">Waiting for the first message...</span></div></div></div>`);
       return;
     }
   }
@@ -979,6 +1077,7 @@ refreshLab();
 let startRole = "sender";
 try { startRole = localStorage.getItem("classpi-net-role") || "sender"; } catch (_) {}
 setRole(startRole);
+announceTheme();   // let a paired receiver match this sender's app from the off
 </script>
 </body>
 </html>
