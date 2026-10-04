@@ -245,6 +245,9 @@
     <span class="muted" style="font-size:14px">Direct cable lab:
       <b id="autoRelayState" style="color:var(--text)">checking for a middle Pi...</b></span>
   </div>
+  <div class="row" id="keyWarnRow" style="display:none">
+    <span id="keyWarn" style="color:#ffb0b0;font-size:14px"></span>
+  </div>
   <div class="row" id="animRow">
     <label class="switch" title="Show the animated diagram (Classic only)">
       <input type="checkbox" id="showAnim" checked><span class="track"></span>
@@ -614,6 +617,16 @@ function updateAutoRelayUI(d) {
   const inLab = d.mode !== "normal";
   $("relayRow").style.display = inLab ? "none" : "";
   $("autoRelayNote").style.display = inLab ? "" : "none";
+  // A receiver with a different shared key (or no AES library) would show
+  // "(could not decrypt)" for AES - say so here, before anything is sent.
+  let keyWarn = "";
+  if (d.mode === "sender" && d.receiver_key_ok === false)
+    keyWarn = "The receiver Pi has a different shared key, so AES messages will not open there. " +
+              "Re-run the installer on one of them so every Pi has the same Network Lab key.";
+  else if (d.mode === "sender" && d.receiver_aes === false)
+    keyWarn = "The receiver Pi is missing its AES library, so AES messages will not open there - update it.";
+  $("keyWarnRow").style.display = keyWarn ? "" : "none";
+  $("keyWarn").textContent = keyWarn;
   if (d.mode !== "sender") {
     if (inLab) $("autoRelayState").textContent = "the sender Pi picks the route by itself";
     return;
@@ -773,7 +786,9 @@ async function testConns() {
     if (!ip) continue;
     try {
       const r = await api("/api/net/ping", { method: "POST", body: { ip } });
-      out.push(`${label} ${ip}: OK (${r.node.hostname})`);
+      const key = r.node.key_match === false ? " - DIFFERENT SHARED KEY, AES will not open there"
+                : r.node.aes === false ? " - no AES library, update that Pi" : "";
+      out.push(`${label} ${ip}: OK (${r.node.hostname})${key}`);
     } catch (err) {
       out.push(`${label} ${ip}: unreachable`);
     }

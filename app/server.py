@@ -848,6 +848,12 @@ def _derive_key(passphrase):
     return base64.urlsafe_b64encode(hashlib.sha256(passphrase.encode()).digest())
 
 
+def _key_fp():
+    """Short hash of the shared AES key - safe to compare between Pis,
+    useless for recovering the key. Must match netnode.KEY_FP's recipe."""
+    return hashlib.sha256(str(CONFIG["net_key"]).encode()).hexdigest()[:8]
+
+
 def encrypt_message(text, passphrase):
     """Return (ciphertext_string, scheme). Real AES via Fernet when available."""
     try:
@@ -971,14 +977,27 @@ def lab_mode():
     # The sender's screen shows (and routes by) what is really plugged in,
     # so check for the other lab Pis while we are here.
     middle_up = receiver_up = None
+    receiver_key_ok = receiver_aes = None
     if mode == "sender":
         port = int(CONFIG["net_port"])
         middle_up = _probe_port(LAB_MODES["middle"], port, 0.35)
         receiver_up = _probe_port(LAB_MODES["receiver"], port, 0.35)
+        if receiver_up:
+            # AES only opens if both ends hold the same key, so compare
+            # fingerprints while we are looking - the sender's screen can
+            # warn up front instead of the receiver showing
+            # "(could not decrypt - wrong key?)" after the fact.
+            try:
+                w = _node(LAB_MODES["receiver"], "/whoami", timeout=0.8)
+                fp, receiver_aes = w.get("key_fp"), w.get("aes")
+                receiver_key_ok = (fp == _key_fp()) if fp else None
+            except Exception:
+                pass   # older node or slow reply - just skip the key check
     return jsonify(
         ok=True, mode=mode, ip=lab or _ip_address(), addresses=LAB_MODES,
         eth_count=len(eths), eths=eths,
         middle_up=middle_up, receiver_up=receiver_up,
+        receiver_key_ok=receiver_key_ok, receiver_aes=receiver_aes,
         available=os.path.exists(LABNET),
     )
 
@@ -1099,9 +1118,13 @@ def net_ping():
     if not re.match(r"^[\w.\-]{1,60}$", ip):
         return jsonify(ok=False, error="Enter a valid address"), 400
     try:
-        return jsonify(ok=True, node=_node(ip, "/whoami"))
+        node = _node(ip, "/whoami")
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 502
+    # Older nodes do not report a fingerprint - leave key_match unknown then.
+    fp = node.get("key_fp")
+    node["key_match"] = (fp == _key_fp()) if fp else None
+    return jsonify(ok=True, node=node)
 
 
 @app.post("/api/net/send")

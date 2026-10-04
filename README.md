@@ -291,6 +291,14 @@ cryptography:
 - **Modern (AES)** — real symmetric encryption using the shared key set at
   install, which never travels with the message.
 
+> **AES needs the same key on every Pi.** The *Network Lab key* is set when each
+> Pi is installed (default `clyde-kelvin`). If the receiver shows
+> `(could not decrypt - wrong key?)`, one Pi was given a different key — the
+> sender's ⓘ settings warn about this in the cable lab, and the *Check* button
+> next to the addresses says which Pi disagrees. Fix it by re-running
+> `sudo bash install.sh` on that Pi and typing the same key (other answers keep
+> their existing values).
+
 On the **middle screen**, plaintext shows in full, and classical ciphers get a
 **"Crack it"** button that reveals the message (brute-forcing Caesar, reading
 pigpen off the key card) — showing why they're weak. For modern encryption the

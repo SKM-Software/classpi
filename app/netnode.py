@@ -12,6 +12,7 @@ traffic. That keeps the demo an honest illustration of the man-in-the-middle
 
 Binds to 0.0.0.0 so peers can reach it. Store is in memory only.
 """
+import hashlib
 import json
 import os
 import re
@@ -23,19 +24,36 @@ import requests
 from flask import Flask, jsonify, request
 
 
+def _config():
+    try:
+        with open(os.environ.get("CLASSPI_CONFIG", "/etc/classpi/config.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+
+
 def _port():
     """CLASSPI_NET_PORT wins; otherwise use net_port from the shared config."""
     env = os.environ.get("CLASSPI_NET_PORT")
     if env:
         return int(env)
     try:
-        with open(os.environ.get("CLASSPI_CONFIG", "/etc/classpi/config.json")) as f:
-            return int(json.load(f).get("net_port", 8090))
-    except (OSError, ValueError, json.JSONDecodeError):
+        return int(_config().get("net_port", 8090))
+    except (TypeError, ValueError):
         return 8090
 
 
 PORT = _port()
+
+# A short hash of the shared AES key - never the key itself. Two Pis holding
+# the same secret produce the same fingerprint, so the control panel can spot
+# a mismatched Pi before a message shows up as "(could not decrypt)".
+KEY_FP = hashlib.sha256(str(_config().get("net_key", "clyde-kelvin")).encode()).hexdigest()[:8]
+try:
+    from cryptography.fernet import Fernet as _Fernet  # noqa: F401
+    AES_OK = True
+except Exception:
+    AES_OK = False   # the app falls back to the XOR demo scheme without it
 inbox = deque(maxlen=50)   # messages delivered to this node (as receiver)
 seen = deque(maxlen=50)    # messages this node forwarded (as relay)
 
@@ -68,7 +86,8 @@ def _ip():
 
 @app.get("/whoami")
 def whoami():
-    return jsonify(ok=True, hostname=socket.gethostname(), ip=_ip(), node="classpi", port=PORT)
+    return jsonify(ok=True, hostname=socket.gethostname(), ip=_ip(), node="classpi", port=PORT,
+                   key_fp=KEY_FP, aes=AES_OK)
 
 
 def _record(d):
