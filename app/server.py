@@ -7,15 +7,14 @@ Serves the launcher and classroom apps on 127.0.0.1 and provides a small API:
   /api/files           list / load / save pupil work files
   /api/quiz            quiz question bank
   /api/system          live Pi stats (temp, CPU, memory, disk, IP)
-  /api/system/action   reboot / shutdown / exit kiosk (teacher PIN required)
+  /api/system/action   reboot / shutdown / exit kiosk (confirmed in the UI)
   /api/browser         open / close a real Chromium window on the kiosk screen
-  /api/wifi            status, scan, connect / forget (teacher PIN to change)
+  /api/wifi            status, scan, connect / forget
   /api/internet        online / captive portal (needs sign-in) / offline
 """
 import base64
 import concurrent.futures
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -46,7 +45,6 @@ CONFIG_PATH = Path(os.environ.get("CLASSPI_CONFIG", "/etc/classpi/config.json"))
 DEFAULT_CONFIG = {
     "device_name": "ClassPi",
     "school_name": "Computing Science",
-    "teacher_pin": "1234",
     "host": "127.0.0.1",
     "port": 8080,
     "work_dir": str(Path.home() / "ClassPi-Work"),
@@ -342,11 +340,6 @@ def update_check():
 
 @app.post("/api/system/update")
 def update_apply():
-    payload = request.get_json(silent=True) or {}
-    pin = str(payload.get("pin", ""))
-    if not hmac.compare_digest(pin, str(CONFIG["teacher_pin"])):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     repo = _repo_dir()
     if not repo:
         return jsonify(ok=False, error=NOT_A_CLONE), 400
@@ -377,19 +370,10 @@ ACTIONS = {
 }
 
 
-def _pin_ok(payload):
-    """Constant-time teacher PIN check (callers sleep a second on failure)."""
-    return hmac.compare_digest(str(payload.get("pin", "")), str(CONFIG["teacher_pin"]))
-
-
 @app.post("/api/system/action")
 def system_action():
     payload = request.get_json(silent=True) or {}
-    pin = str(payload.get("pin", ""))
     action = payload.get("action")
-    if not hmac.compare_digest(pin, str(CONFIG["teacher_pin"])):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     if action == "check":
         return jsonify(ok=True)
     if action not in ACTIONS:
@@ -744,9 +728,6 @@ def wifi_scan():
 @app.post("/api/wifi/connect")
 def wifi_connect():
     d = request.get_json(silent=True) or {}
-    if not _pin_ok(d):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     ssid = str(d.get("ssid", "")).strip()[:32]
     if not ssid:
         return jsonify(ok=False, error="Enter the network name"), 400
@@ -769,9 +750,6 @@ def wifi_connect():
 @app.post("/api/wifi/forget")
 def wifi_forget():
     d = request.get_json(silent=True) or {}
-    if not _pin_ok(d):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     ssid = str(d.get("ssid", "")).strip()[:32]
     if not ssid:
         return jsonify(ok=False, error="Enter the network name"), 400
@@ -784,10 +762,6 @@ def wifi_forget():
 
 @app.post("/api/wifi/on")
 def wifi_on():
-    d = request.get_json(silent=True) or {}
-    if not _pin_ok(d):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     country = str(CONFIG.get("wifi_country") or "GB").strip().upper()
     if not re.match(r"^[A-Z]{2}$", country):
         country = "GB"
@@ -1005,9 +979,6 @@ def lab_mode():
 @app.post("/api/net/labmode")
 def set_lab_mode():
     payload = request.get_json(silent=True) or {}
-    if not hmac.compare_digest(str(payload.get("pin", "")), str(CONFIG["teacher_pin"])):
-        time.sleep(1)
-        return jsonify(ok=False, error="Wrong PIN"), 403
     mode = str(payload.get("mode", ""))
     if mode not in LAB_MODES and mode != "normal":
         return jsonify(ok=False, error="Unknown mode"), 400

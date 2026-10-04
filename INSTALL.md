@@ -99,7 +99,6 @@ It asks four questions — press **Enter** to accept the default in brackets:
 |---|---|
 | **Device name** | Shown on screen and becomes the hostname (e.g. "Lab Pi 1" → `lab-pi-1`) |
 | **School / department name** | Shown under the device name |
-| **Teacher PIN** | Required for restart / shutdown / exit / installing updates |
 | **Network Lab shared key** | The AES key for the encryption demo — use the **same key on every Pi** |
 
 Then it installs packages (a few minutes), sets up the services, kiosk and
@@ -110,7 +109,7 @@ sudo reboot
 ```
 
 > **Installing a whole classroom?** Skip the prompts:
-> `sudo CLASSPI_NAME="Lab Pi 3" CLASSPI_PIN=4821 CLASSPI_NET_KEY=our-key bash install.sh`
+> `sudo CLASSPI_NAME="Lab Pi 3" CLASSPI_NET_KEY=our-key bash install.sh`
 >
 > Re-running the installer later is always safe — it keeps the answers you
 > gave the first time as the defaults.
@@ -143,7 +142,7 @@ GitHub.
 ## Wi-Fi and the web browser
 
 - **Wi-Fi:** open **System** (key **7**) → **Wi-Fi** → *Scan for networks*,
-  pick one, type the password and the teacher PIN. School networks that also
+  pick one and type the password. School networks that also
   need a username ask for both. If the panel says Wi-Fi is *blocked*, press
   **Turn Wi-Fi on** — it sets the country (`GB` unless changed in the config)
   and enables the radio.
@@ -156,7 +155,7 @@ GitHub.
 ## Updating later
 
 - **On the Pi:** System → **Software update** → *Check for updates* →
-  *Install update* (teacher PIN). Done in seconds.
+  *Install update*. Done in seconds.
 - **Over SSH:** `cd ~/classpi && sudo bash update.sh`
 - If a release note says it changes packages/services/config:
   `cd ~/classpi && git pull && sudo bash install.sh` (Enter through the
@@ -195,7 +194,6 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | Installer says it can't reach the internet | Plug in ethernet, or `sudo raspi-config` → Localisation → WLAN Country, then System → Wireless LAN. Re-run the installer. |
 | Black screen after reboot | Wait 30 s (first kiosk start is slow). Then Ctrl+Alt+F2, log in, `systemctl status classpi-kiosk classpi` to see what failed. |
 | Launcher shows but tools error | `journalctl -u classpi -e` for the server log. |
-| Forgot the teacher PIN | Ctrl+Alt+F2, log in, `sudo nano /etc/classpi/config.json`, change `teacher_pin`, then `sudo systemctl restart classpi`. |
 | Update button says "not installed from the GitHub clone" | The Pi was set up from a USB copy. Follow "Updating a Pi" in the README to switch it to the clone once. |
 | Network Lab finds no other Pis | They must be switched on, finished booting, and on the *same* network — all ethernet or all the same Wi-Fi. Check each Pi's address on its **System** screen; if the first three parts differ (e.g. 192.168.**1**.x vs 192.168.**4**.x) they are on separate networks. |
 | Receiver stays on *Waiting for a message...* after Send | The sender ran a **Simulation** (see the chip in its top-right corner): its Receiver box was empty, so nothing left the Pi. Open **i** → *Connect real Pis*, pick or type the receiver's address (`10.0.0.3` in the direct cable lab), then **Test connections** and send again. |
@@ -203,7 +201,7 @@ Full teaching notes are in the [README](README.md#the-network-lab-1-2-or-3-pis).
 | No internet / updates after a Network Lab lesson | A Pi was left in **Direct cable lab** mode. Open Network Lab → **i** → *Direct cable lab* → **Back to normal**. |
 | "Middle" button greyed out in Direct cable lab | That Pi has only one wired port. The middle Pi needs a USB ethernet adapter so it can bridge two cables. |
 | Wi-Fi panel says the Pi was "set up before Wi-Fi settings existed" | `cd ~/classpi && git pull && sudo bash install.sh` once (Enter through the prompts). |
-| Wi-Fi shows as *blocked* | No country has been set yet. System → **Wi-Fi** → **Turn Wi-Fi on** (teacher PIN). |
+| Wi-Fi shows as *blocked* | No country has been set yet. System → **Wi-Fi** → **Turn Wi-Fi on**. |
 | Public Wi-Fi joins but no sign-in page appears, and the Pi is very slow | Update with `git pull && sudo bash install.sh`. The sign-in page then opens after connecting (or tap **wi-fi sign-in needed** in the status bar), and the slowness, caused by a browser filter waiting on the internet, goes away. |
 | Browser tile says it could not open | Chromium must be installed and the kiosk running; `journalctl -u classpi -e` shows the reason. |
 | Want the Pi back to normal | `cd ~/classpi && sudo bash uninstall.sh`, then reboot. |

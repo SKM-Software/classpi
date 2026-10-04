@@ -21,7 +21,7 @@ too.
 | **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. Skin the sender and receiver as real apps (chat, email, a login screen, a card payment) while the interceptor's screen stays raw. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
-| **System** | Live Pi health (temp, memory, disk, load, IP), Wi-Fi setup, one-click updates from GitHub, and PIN-protected restart / shutdown / exit-to-console. |
+| **System** | Live Pi health (temp, memory, disk, load, IP), Wi-Fi setup, one-click updates from GitHub, and restart / shutdown / exit-to-console behind a simple "Are you sure?". |
 | **Web Browser** | A real Chromium window — address bar, tabs, back button — opened on top of ClassPi. Locked down for a classroom (no downloads, extensions, dev tools or sign-in; safe search forced) with a **Back to ClassPi** button, a ClassPi bookmark and a Home button that lead back. |
 
 Everything works with **arrow keys + Enter** and number-key shortcuts, and
@@ -69,8 +69,8 @@ cd classpi
 sudo bash install.sh
 ```
 
-It will ask for a device name, your department name, a teacher PIN, and a shared
-key for the Network Lab (all have sensible defaults — just press Enter). Then:
+It will ask for a device name, your department name, and a shared key for the
+Network Lab (all have sensible defaults — just press Enter). Then:
 
 ```bash
 sudo reboot
@@ -79,14 +79,14 @@ sudo reboot
 The Pi now boots to the ClassPi launcher automatically. That's it.
 
 > Prefer no prompts (e.g. imaging lots of Pis)? Set them up front:
-> `sudo CLASSPI_NAME="Lab Pi 1" CLASSPI_PIN=4821 bash install.sh`
+> `sudo CLASSPI_NAME="Lab Pi 1" CLASSPI_NET_KEY=our-key bash install.sh`
 
 ---
 
 ## Updating a Pi after pushing changes
 
 **Easiest: on the Pi itself.** Open **System → Software update**, press
-*Check for updates*, then *Install update* (teacher PIN). The Pi pulls the
+*Check for updates*, then *Install update*. The Pi pulls the
 latest code from GitHub, applies it and the screen reloads — no SSH needed.
 (This needs the Pi to have been set up from the GitHub clone.)
 
@@ -138,7 +138,7 @@ e.g. `"https://www.google.com/search?q="`) or replace the quick links
 ## Connecting to Wi-Fi
 
 **System → Wi-Fi** shows what the Pi is connected to, scans for networks and
-joins one with the teacher PIN. Networks that need a username as well as a
+joins one. Networks that need a username as well as a
 password (school / enterprise logins) are detected and ask for both; **Other
 network…** handles hidden networks. **Forget this network** drops a saved one.
 
@@ -234,7 +234,7 @@ ports), an **RJ45 inline coupler** (~£3), and two ethernet cables. No switch or
 router.
 
 **Set it up** in the settings (**i**) → **Direct cable lab**, on each Pi. Press
-*Sender*, *Middle* or *Receiver*, enter the teacher PIN, done — each Pi takes a
+*Sender*, *Middle* or *Receiver*, confirm, done — each Pi takes a
 fixed address (`10.0.0.1`, `.2`, `.3`) so they can talk with no router handing
 out addresses. The middle Pi bridges its two ports so traffic really does pass
 through it. **Back to normal** returns any Pi to the school network.
@@ -358,8 +358,8 @@ the wire.
 
 ## Changing things
 
-- **Settings** live in `/etc/classpi/config.json` (device name, teacher PIN,
-  shared key, timeout, browser search engine and quick links, Wi-Fi country).
+- **Settings** live in `/etc/classpi/config.json` (device name, shared key,
+  timeout, browser search engine and quick links, Wi-Fi country).
   Edit, then `sudo systemctl restart classpi`. Re-running the installer keeps
   any keys you add.
 - **Quiz questions:** edit `app/data/quiz.json`, or drop a `ClassPi-Quiz.json`

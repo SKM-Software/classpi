@@ -35,7 +35,6 @@
   #wifiModal label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 15px; }
   #wifiModal input { font-size: 18px; text-align: left; letter-spacing: 0; font-family: var(--sans); margin: 4px 0 0; }
   #wifiModal input[type=checkbox] { width: auto; margin: 0; }
-  #wifiModal #wifiPin { font-family: var(--mono); letter-spacing: 6px; text-align: center; }
 </style>
 </head>
 <body>
@@ -50,7 +49,7 @@
   <div class="grid" id="stats"></div>
 
   <div class="panel" style="margin-top:22px" id="wifiPanel">
-    <h2 style="margin-top:0">Wi-Fi <span class="chip">teacher PIN to connect</span></h2>
+    <h2 style="margin-top:0">Wi-Fi</h2>
     <p class="muted" id="wifiNow">Checking...</p>
     <div class="power">
       <button class="btn" id="wifiScan">Scan for networks</button>
@@ -64,7 +63,7 @@
   </div>
 
   <div class="panel" style="margin-top:22px">
-    <h2 style="margin-top:0">Software update <span class="chip">teacher PIN to install</span></h2>
+    <h2 style="margin-top:0">Software update</h2>
     <p class="muted" id="updStatus">Checks the SKM-Software GitHub repository for a newer version of ClassPi.</p>
     <div class="power">
       <button class="btn" id="updCheck">Check for updates</button>
@@ -73,8 +72,8 @@
   </div>
 
   <div class="panel" style="margin-top:22px">
-    <h2 style="margin-top:0">Power &amp; kiosk <span class="chip">teacher PIN</span></h2>
-    <p class="muted">These need the teacher PIN set during installation.</p>
+    <h2 style="margin-top:0">Power &amp; kiosk</h2>
+    <p class="muted">Each of these asks "Are you sure?" before it runs.</p>
     <div class="power">
       <button class="btn" data-action="exit_kiosk">Exit to console</button>
       <button class="btn" data-action="reboot">Restart Pi</button>
@@ -101,8 +100,6 @@
         <button class="btn" type="button" id="wifiShow">Show</button>
       </div>
     </div>
-    <label for="wifiPin">Teacher PIN</label>
-    <input type="password" id="wifiPin" inputmode="numeric" maxlength="8">
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn primary" id="wifiGo" style="flex:1">Connect</button>
       <button class="btn" id="wifiCancel">Cancel</button>
@@ -111,15 +108,14 @@
   </div>
 </div>
 
-<div class="modal" id="pinModal">
+<div class="modal" id="confirmModal">
   <div class="panel">
-    <h2 style="margin-top:0" id="pinTitle">Enter teacher PIN</h2>
-    <input type="password" id="pin" inputmode="numeric" maxlength="8" placeholder="PIN">
+    <h2 style="margin-top:0" id="confirmTitle">Are you sure?</h2>
     <div style="display:flex; gap:10px">
-      <button class="btn primary" id="pinOk" style="flex:1">Confirm</button>
-      <button class="btn" id="pinCancel">Cancel</button>
+      <button class="btn primary" id="confirmOk" style="flex:1">Yes, go ahead</button>
+      <button class="btn" id="confirmCancel">Cancel</button>
     </div>
-    <p class="muted" id="pinErr" style="min-height:22px"></p>
+    <p class="muted" id="confirmErr" style="min-height:22px"></p>
   </div>
 </div>
 
@@ -160,31 +156,27 @@ async function refresh() {
   ).join("");
 }
 
-function askPin(action, title) {
+function askConfirm(action, title) {
   pending = action;
-  $("pinTitle").textContent = title;
-  $("pinErr").textContent = "";
-  $("pin").value = "";
-  $("pinModal").classList.add("open");
-  setTimeout(() => $("pin").focus(), 50);
+  $("confirmTitle").textContent = title;
+  $("confirmErr").textContent = "";
+  $("confirmModal").classList.add("open");
+  setTimeout(() => $("confirmOk").focus(), 50);
 }
-function closePin() { $("pinModal").classList.remove("open"); pending = null; }
+function closeConfirm() { $("confirmModal").classList.remove("open"); pending = null; }
 
-async function confirmPin() {
+async function doConfirmed() {
   if (!pending) return;
-  const pin = $("pin").value;
-  if (pending === "update") { return confirmUpdate(pin); }
-  if (typeof pending === "object") { return confirmWifi(pin); }
+  if (pending === "update") { return confirmUpdate(); }
   const labels = { reboot: "Restarting...", shutdown: "Shutting down...", exit_kiosk: "Exiting kiosk..." };
   try {
-    await api("/api/system/action", { method: "POST", body: { pin, action: pending } });
-    $("pinErr").style.color = "var(--good)";
-    $("pinErr").textContent = labels[pending] || "Done";
-    setTimeout(closePin, 1500);
+    await api("/api/system/action", { method: "POST", body: { action: pending } });
+    $("confirmErr").style.color = "var(--good)";
+    $("confirmErr").textContent = labels[pending] || "Done";
+    setTimeout(closeConfirm, 1500);
   } catch (err) {
-    $("pinErr").style.color = "var(--bad)";
-    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : "Could not do that: " + err.message;
-    $("pin").value = ""; $("pin").focus();
+    $("confirmErr").style.color = "var(--bad)";
+    $("confirmErr").textContent = "Could not do that: " + err.message;
   }
 }
 
@@ -209,20 +201,19 @@ $("updCheck").onclick = async () => {
   }
 };
 
-$("updGo").onclick = () => askPin("update", "Install the update now?");
+$("updGo").onclick = () => askConfirm("update", "Install the update now?");
 
-async function confirmUpdate(pin) {
-  $("pinErr").style.color = "var(--muted)";
-  $("pinErr").textContent = "Updating...";
+async function confirmUpdate() {
+  $("confirmErr").style.color = "var(--muted)";
+  $("confirmErr").textContent = "Updating...";
   try {
-    await api("/api/system/update", { method: "POST", body: { pin } });
+    await api("/api/system/update", { method: "POST", body: {} });
   } catch (err) {
-    $("pinErr").style.color = "var(--bad)";
-    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : "Update failed: " + err.message;
-    $("pin").value = ""; $("pin").focus();
+    $("confirmErr").style.color = "var(--bad)";
+    $("confirmErr").textContent = "Update failed: " + err.message;
     return;
   }
-  closePin();
+  closeConfirm();
   $("updGo").disabled = true;
   const s = $("updStatus");
   s.textContent = "Installing - the app restarts itself, then this page reloads...";
@@ -313,12 +304,12 @@ function openWifiModal(net) {
   $("wifiEntRow").style.display = manual ? "" : "none";
   $("wifiEnt").checked = manual ? false : net.enterprise;
   $("wifiPassRow").style.display = (manual || net.secure) ? "" : "none";
-  $("wifiUser").value = ""; $("wifiPass").value = ""; $("wifiPin").value = "";
+  $("wifiUser").value = ""; $("wifiPass").value = "";
   $("wifiPass").type = "password"; $("wifiShow").textContent = "Show";
   $("wifiErr").textContent = "";
   syncEnt();
   $("wifiModal").classList.add("open");
-  const first = manual ? "wifiSsid" : !net.secure ? "wifiPin" : net.enterprise ? "wifiUser" : "wifiPass";
+  const first = manual ? "wifiSsid" : !net.secure ? "wifiGo" : net.enterprise ? "wifiUser" : "wifiPass";
   setTimeout(() => $(first).focus(), 50);
 }
 function closeWifi() { $("wifiModal").classList.remove("open"); }
@@ -329,7 +320,6 @@ $("wifiGo").onclick = async () => {
     password: $("wifiPassRow").style.display === "none" ? "" : $("wifiPass").value,
     username: $("wifiEnt").checked ? $("wifiUser").value.trim() : "",
     hidden: $("wifiHidden").checked,
-    pin: $("wifiPin").value,
   };
   if (!body.ssid) { $("wifiErr").textContent = "Enter the network name."; return; }
   $("wifiGo").disabled = true;
@@ -347,28 +337,10 @@ $("wifiGo").onclick = async () => {
     setTimeout(() => { closeWifi(); wifiRefresh(); wifiScanNets(); }, 1500);
   } catch (err) {
     $("wifiErr").style.color = "var(--bad)";
-    $("wifiErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
-    if (err.message === "Wrong PIN") { $("wifiPin").value = ""; $("wifiPin").focus(); }
+    $("wifiErr").textContent = err.message;
   }
   $("wifiGo").disabled = false;
 };
-
-async function confirmWifi(pin) {
-  const p = pending;
-  $("pinErr").style.color = "var(--muted)";
-  $("pinErr").textContent = p.kind === "wifi_on" ? "Turning Wi-Fi on..." : "Forgetting...";
-  try {
-    const r = await api(p.kind === "wifi_on" ? "/api/wifi/on" : "/api/wifi/forget",
-                        { method: "POST", body: { pin, ssid: p.ssid || "" } });
-    $("pinErr").style.color = "var(--good)";
-    $("pinErr").textContent = r.message || "Done";
-    setTimeout(() => { closePin(); wifiRefresh(); }, 1200);
-  } catch (err) {
-    $("pinErr").style.color = "var(--bad)";
-    $("pinErr").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
-    $("pin").value = ""; $("pin").focus();
-  }
-}
 
 // The sign-in page opens in the Web Browser window; once it is accepted, close
 // the browser (Back to ClassPi, or Ctrl+Shift+W) and the warning clears itself.
@@ -396,21 +368,36 @@ $("wifiModal").querySelectorAll("input").forEach((i) => i.addEventListener("keyd
 }));
 $("wifiScan").onclick = wifiScanNets;
 $("wifiOther").onclick = () => openWifiModal(null);
-$("wifiOn").onclick = () => askPin({ kind: "wifi_on" }, "Turn Wi-Fi on?");
-$("wifiForget").onclick = () => {
+$("wifiOn").onclick = async () => {
+  $("wifiMsg").textContent = "Turning Wi-Fi on...";
+  try {
+    const r = await api("/api/wifi/on", { method: "POST", body: {} });
+    $("wifiMsg").textContent = r.message || "Wi-Fi is on";
+    wifiRefresh(); wifiScanNets();
+  } catch (err) { $("wifiMsg").textContent = err.message; }
+};
+$("wifiForget").onclick = async () => {
   if (!wifiStatus || !wifiStatus.connected) return;
-  askPin({ kind: "wifi_forget", ssid: wifiStatus.connected.ssid }, `Forget "${wifiStatus.connected.ssid}"?`);
+  const ssid = wifiStatus.connected.ssid;
+  $("wifiMsg").textContent = `Forgetting "${ssid}"...`;
+  try {
+    const r = await api("/api/wifi/forget", { method: "POST", body: { ssid } });
+    $("wifiMsg").textContent = r.message || "Forgotten";
+    wifiRefresh();
+  } catch (err) { $("wifiMsg").textContent = err.message; }
 };
 wifiRefresh();
 setInterval(wifiRefresh, 15000);
 
 document.querySelectorAll("[data-action]").forEach((b) => b.onclick = () => {
   const titles = { reboot: "Restart this Pi?", shutdown: "Shut down this Pi?", exit_kiosk: "Exit to the console (login prompt)?" };
-  askPin(b.dataset.action, titles[b.dataset.action]);
+  askConfirm(b.dataset.action, titles[b.dataset.action]);
 });
-$("pinOk").onclick = confirmPin;
-$("pinCancel").onclick = closePin;
-$("pin").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmPin(); if (e.key === "Escape") closePin(); });
+$("confirmOk").onclick = doConfirmed;
+$("confirmCancel").onclick = closeConfirm;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("confirmModal").classList.contains("open")) closeConfirm();
+});
 
 refresh();
 setInterval(refresh, 3000);

@@ -39,7 +39,6 @@ existing() {
 }
 DEVICE_NAME="${CLASSPI_NAME:-$(existing device_name)}";   DEVICE_NAME="${DEVICE_NAME:-ClassPi}"
 SCHOOL_NAME="${CLASSPI_SCHOOL:-$(existing school_name)}"; SCHOOL_NAME="${SCHOOL_NAME:-Computing Science}"
-TEACHER_PIN="${CLASSPI_PIN:-$(existing teacher_pin)}";    TEACHER_PIN="${TEACHER_PIN:-1234}"
 NET_KEY="${CLASSPI_NET_KEY:-$(existing net_key)}";        NET_KEY="${NET_KEY:-clyde-kelvin}"
 
 if [[ -t 0 ]]; then
@@ -49,10 +48,9 @@ if [[ -t 0 ]]; then
   echo
   read -rp "Device name (shown on screen)  [$DEVICE_NAME]: " x;    DEVICE_NAME="${x:-$DEVICE_NAME}"
   read -rp "School / department name  [$SCHOOL_NAME]: " x;         SCHOOL_NAME="${x:-$SCHOOL_NAME}"
-  read -rp "Teacher PIN (for power/exit)  [$TEACHER_PIN]: " x;     TEACHER_PIN="${x:-$TEACHER_PIN}"
   read -rp "Network Lab shared key  [$NET_KEY]: " x;               NET_KEY="${x:-$NET_KEY}"
 else
-  warn "No terminal input - keeping existing/default settings (set CLASSPI_NAME / CLASSPI_PIN etc. to override)."
+  warn "No terminal input - keeping existing/default settings (set CLASSPI_NAME / CLASSPI_NET_KEY etc. to override)."
 fi
 
 # --------------------------------------------------------------- packages
@@ -95,7 +93,7 @@ WORK_DIR="$TARGET_HOME/ClassPi-Work"
 # Merge into the existing file so settings added by hand (browser links, the
 # search engine, Wi-Fi country...) survive a re-run. Values travel through the
 # environment, so free-text answers need no JSON escaping.
-CFG_FILE="$CONFIG_FILE" CFG_NAME="$DEVICE_NAME" CFG_SCHOOL="$SCHOOL_NAME" CFG_PIN="$TEACHER_PIN" \
+CFG_FILE="$CONFIG_FILE" CFG_NAME="$DEVICE_NAME" CFG_SCHOOL="$SCHOOL_NAME" \
 CFG_KEY="$NET_KEY" CFG_WORK="$WORK_DIR" CFG_REPO="$SRC_DIR" CFG_COUNTRY="${CLASSPI_WIFI_COUNTRY:-}" \
 python3 - <<'PY'
 import json, os
@@ -110,10 +108,11 @@ except (OSError, ValueError):
     cfg = {}
 cfg.update({
     "device_name": e["CFG_NAME"], "school_name": e["CFG_SCHOOL"],
-    "teacher_pin": e["CFG_PIN"], "net_key": e["CFG_KEY"],
+    "net_key": e["CFG_KEY"],
     "host": "127.0.0.1", "port": 8080,
     "work_dir": e["CFG_WORK"], "repo_dir": e["CFG_REPO"],
 })
+cfg.pop("teacher_pin", None)   # PINs were replaced by simple confirmations
 cfg.setdefault("net_port", 8090)
 cfg.setdefault("run_timeout_seconds", 5)
 if e["CFG_COUNTRY"]:
@@ -483,10 +482,9 @@ say "${BOLD}ClassPi is installed.${NC}"
 echo "  Device name : $DEVICE_NAME"
 echo "  Hostname    : $NEW_HOST  (reach it at http://$NEW_HOST.local on your network)"
 echo "  Pupil work  : $WORK_DIR"
-echo "  Teacher PIN : $TEACHER_PIN   (change any time in $CONFIG_FILE)"
 echo
 echo "  Web browser : the Browser tile opens Chromium on top of ClassPi (Back to ClassPi closes it)."
-echo "  Wi-Fi       : System > Wi-Fi to join a network (teacher PIN)."
+echo "  Wi-Fi       : System > Wi-Fi to join a network."
 echo
 echo "  For the Network Lab, install ClassPi on each Pi and wire them together."
 echo "  On the sender's screen open Network Lab and enter the other Pis' addresses."

@@ -292,10 +292,8 @@
       <button class="btn" data-lab="receiver">Receiver &middot; 10.0.0.3</button>
       <button class="btn primary" data-lab="normal">Back to normal</button>
     </div>
-    <div class="row" id="labPinRow" style="display:none">
-      <label for="labPin">Teacher PIN</label>
-      <input type="password" id="labPin" maxlength="8" style="width:110px" inputmode="numeric">
-      <button class="btn primary" id="labGo">Apply</button>
+    <div class="row" id="labConfirmRow" style="display:none">
+      <button class="btn primary" id="labGo">Yes, switch</button>
       <button class="btn" id="labCancel">Cancel</button>
     </div>
     <p class="muted" id="labStatus" style="font-size:14px"></p>
@@ -679,34 +677,30 @@ async function refreshLab() {
 
 document.querySelectorAll("[data-lab]").forEach((b) => b.onclick = () => {
   labPending = b.dataset.lab;
-  $("labPinRow").style.display = "";
-  $("labStatus").textContent = `Set this Pi as ${LAB_NAME[labPending]}? Enter the teacher PIN.`;
-  $("labPin").value = "";
-  $("labPin").focus();
+  $("labConfirmRow").style.display = "";
+  $("labStatus").textContent = `Set this Pi as ${LAB_NAME[labPending]} - are you sure?`;
 });
 $("labCancel").onclick = () => {
-  labPending = null; $("labPinRow").style.display = "none"; $("labStatus").textContent = "";
+  labPending = null; $("labConfirmRow").style.display = "none"; $("labStatus").textContent = "";
 };
 $("labGo").onclick = async () => {
   if (!labPending) return;
   $("labStatus").textContent = "Changing the network...";
   $("labGo").disabled = true;
   try {
-    const r = await api("/api/net/labmode", { method: "POST", body: { pin: $("labPin").value, mode: labPending } });
+    const r = await api("/api/net/labmode", { method: "POST", body: { mode: labPending } });
     $("labStatus").textContent = (r.message || "Done") +
       (labPending === "sender" ? " - the Receiver address is filled in under Connect real Pis." : "");
-    $("labPinRow").style.display = "none";
+    $("labConfirmRow").style.display = "none";
     labPending = null;
     scanned = false;               // addresses changed, so the old scan is stale
     $("foundList").innerHTML = "";
   } catch (err) {
-    $("labStatus").textContent = err.message === "Wrong PIN" ? "Wrong PIN, try again." : err.message;
-    $("labPin").value = ""; $("labPin").focus();
+    $("labStatus").textContent = err.message;
   }
   $("labGo").disabled = false;
   refreshLab();
 };
-$("labPin").addEventListener("keydown", (e) => { if (e.key === "Enter") $("labGo").click(); });
 $("labBox").addEventListener("toggle", () => { if ($("labBox").open) refreshLab(); });
 
 // ---- remembering the other Pis' addresses ----
