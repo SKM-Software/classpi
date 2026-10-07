@@ -190,12 +190,23 @@ case "${1:-}" in
     drop_ours
     # stp off: with it on the bridge blocks traffic for ~30s, which looks broken
     # in the middle of a lesson.
+    # autoconnect-slaves: NetworkManager does not attach a bridge's ports when
+    # the bridge comes up unless told to - and a port that is busy on its usual
+    # "Wired connection" (still hunting for DHCP on the lab cable) never joins
+    # on its own. The bridge then has an address but no ports, and nothing
+    # passes through the middle Pi. So ask for the ports, give their profiles
+    # priority over the plain wired ones, and bring each up explicitly too.
     nmcli con add type bridge con-name classpi-br ifname br0 \
       ipv4.method manual ipv4.addresses "$LAB.2/24" ipv4.never-default yes \
-      bridge.stp no connection.autoconnect-priority 100 >/dev/null
-    nmcli con add type ethernet con-name classpi-br-s1 ifname "${DEVS[0]}" master br0 >/dev/null
-    nmcli con add type ethernet con-name classpi-br-s2 ifname "${DEVS[1]}" master br0 >/dev/null
+      bridge.stp no connection.autoconnect-priority 100 \
+      connection.autoconnect-slaves yes >/dev/null
+    nmcli con add type ethernet con-name classpi-br-s1 ifname "${DEVS[0]}" master br0 \
+      connection.autoconnect-priority 100 >/dev/null
+    nmcli con add type ethernet con-name classpi-br-s2 ifname "${DEVS[1]}" master br0 \
+      connection.autoconnect-priority 100 >/dev/null
     nmcli con up classpi-br >/dev/null
+    nmcli con up classpi-br-s1 >/dev/null
+    nmcli con up classpi-br-s2 >/dev/null
     echo "This Pi is now $LAB.2, bridging ${DEVS[0]} and ${DEVS[1]}"
     ;;
   normal)
