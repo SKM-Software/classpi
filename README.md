@@ -21,7 +21,7 @@ too.
 | **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. Skin the sender and receiver as real apps (chat, email, a login screen, a card payment) while the interceptor's screen stays raw. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
-| **Escape Room** | A full-screen hacker-terminal puzzle for younger pupils (S1 / P7): crack four passwords to shut down a rogue AI, then speak to the teacher for a prize. No prior knowledge needed. See below. |
+| **Escape Room** | A full-screen hacker-terminal puzzle for younger pupils (S1 / P7): crack four passwords to shut down a rogue AI. No prior knowledge needed. See below. |
 | **System** | Live Pi health (temp, memory, disk, load, IP), Wi-Fi setup, one-click updates from GitHub, and restart / shutdown / exit-to-console behind a simple "Are you sure?". |
 | **Web Browser** | A real Chromium window — address bar, tabs, back button — opened on top of ClassPi. Locked down for a classroom (no downloads, extensions, dev tools or sign-in; safe search forced) with a **Back to ClassPi** button, a ClassPi bookmark and a Home button that lead back. |
 
@@ -376,13 +376,15 @@ aimed at 11–12 year olds and needs no computing knowledge at all.
 > **Print the key card before the lesson.** Firewall 3 can't be solved without
 > it — the key is only on paper, never on screen. It's
 > [`printables/escape-room-pigpen-key.pdf`](printables/escape-room-pigpen-key.pdf):
-> four cards per A4 sheet; cut it into quarters. Hand them out, or hide
+> four cards per A4 sheet; cut it into quarters. For bigger A5 cards, print
+> [`escape-room-pigpen-key-2-per-page.pdf`](printables/escape-room-pigpen-key-2-per-page.pdf)
+> (landscape, cut in half). Hand them out, or hide
 > them around the room for an extra challenge (the game tells pupils to ask
 > you for one).
 
-When all four are done the screen says **Mission complete** and tells the
-pupil to **speak to the teacher to claim a prize**, with their time. That
-screen stays up until someone presses *Exit*.
+When all four are done the screen says **Mission complete** and
+**Congratulations, agent!**, with their time. That screen stays up until
+someone presses *Exit*.
 
 - **Every mission is different.** The passwords are generated fresh each time,
   so pupils can share *how* they solved a firewall but not the answer itself.
@@ -433,7 +435,8 @@ classpi/
 │   ├── make_splash.py      regenerates the boot splash
 │   └── splash.png          boot splash image
 ├── printables/
-│   └── escape-room-pigpen-key.pdf   key card for the Escape Room (print it)
+│   ├── escape-room-pigpen-key.pdf              Escape Room key cards, 4 per A4
+│   └── escape-room-pigpen-key-2-per-page.pdf   the same, 2 bigger cards per A4
 └── app/
     ├── server.py           local app server (launcher + apps + APIs)
     ├── netnode.py          Network Lab node (runs on every Pi)

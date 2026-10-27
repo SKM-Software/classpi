@@ -182,10 +182,9 @@
   #win { text-align: center; }
   #win .term-win { max-width: 940px; margin: 0 auto; }
   .win-log { display: inline-block; text-align: left; white-space: pre; margin: 4px 0 10px; }
-  .congrats { font-size: 1.7em; color: var(--hi); margin: 10px 0 4px; }
-  .prize {
-    display: inline-block; margin: 22px 0 26px; padding: 16px 30px; border: 2px solid var(--amber); color: var(--amber);
-    font-size: clamp(20px, 3.8vmin, 38px); font-weight: 700; text-shadow: 0 0 10px rgba(255, 204, 51, .6);
+  .congrats {
+    display: inline-block; margin: 14px 0 18px; padding: 16px 34px; border: 2px solid var(--amber); color: var(--amber);
+    font-size: clamp(22px, 4.4vmin, 44px); font-weight: 700; text-shadow: 0 0 10px rgba(255, 204, 51, .6);
     animation: glow 1.6s ease-in-out infinite;
   }
   @keyframes glow { 50% { box-shadow: 0 0 30px rgba(255, 204, 51, .55); } }
@@ -198,7 +197,7 @@
     .hud .brand span { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .glitch::before, .glitch::after, .prize, .pips i.now { animation: none; }
+    .glitch::before, .glitch::after, .congrats, .pips i.now { animation: none; }
   }
 </style>
 </head>
@@ -250,9 +249,8 @@
     <div><div class="win-log">&gt; GLITCH.exe ............... <span class="no">DELETED</span>
 &gt; school computers ......... <b>UNLOCKED</b>
 &gt; threat level ............. <b>ZERO</b></div></div>
-    <p class="congrats">Congratulations, agent!</p>
+    <div class="congrats">Congratulations, agent!</div>
     <p>You cracked all four firewalls and switched GLITCH off. The school is safe.</p>
-    <div class="prize">Speak to your teacher to claim your prize!</div>
     <div class="stats">
       <span>Time<b id="wTime"></b></span>
       <span>Finished at<b id="wWhen"></b></span>
@@ -666,7 +664,7 @@ function showWin() {
 /* ------------------------------------------------------------ exit */
 // Exit ends the mission and goes back to the start screen; only F1 leaves the
 // Escape Room. Two clicks, so a stray one can't throw away a mission, or the
-// finished screen the teacher needs to see.
+// finished screen.
 let exitTimer = null;
 function exitLabel() {
   clearTimeout(exitTimer);
