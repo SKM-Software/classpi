@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escape Room - ClassPi</title>
+<link rel="stylesheet" href="/css/classpi.css">
+<style>
+  :root {
+    --g: #39ff7a; --g-2: #1fae55; --g-dim: #155f33; --g-bg: rgba(8, 36, 18, .62); --hi: #e4ffec;
+    --amber: #ffcc33; --red: #ff4d5e; --cyan: #4de8ff; --black: #020a05;
+  }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column; background: var(--black); color: var(--g);
+    font-family: var(--mono); font-size: clamp(14px, 2.1vmin, 20px); line-height: 1.5;
+    text-shadow: 0 0 6px rgba(57, 255, 122, .45);
+  }
+  ::selection { background: var(--g); color: var(--black); }
+  b { font-weight: 700; color: var(--hi); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ------------------------------------------------------------ backdrop */
+  #rain { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: .13; transition: opacity .8s; }
+  body[data-screen="intro"] #rain, body[data-screen="win"] #rain { opacity: .5; }
+  .crt {                  /* scanlines and a vignette, like an old monitor */
+    position: fixed; inset: 0; z-index: 60; pointer-events: none;
+    background:
+      repeating-linear-gradient(180deg, rgba(0, 0, 0, .22) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .6) 100%);
+  }
+
+  /* ------------------------------------------------------------ hud */
+  .hud {
+    position: relative; z-index: 10; flex: 0 0 auto; display: flex; align-items: center; gap: 18px;
+    padding: 8px 18px; border-bottom: 1px solid var(--g-dim); background: rgba(2, 10, 5, .9);
+    font-size: .8em; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .hud .brand b { color: var(--black); background: var(--g); padding: 0 6px; margin-right: 8px; text-shadow: none; }
+  .hud .grow { flex: 1; }
+  .pips { display: flex; gap: 6px; }
+  .pips i { width: 26px; height: 12px; border: 1px solid var(--g-dim); }
+  .pips i.done { background: var(--g); border-color: var(--g); box-shadow: 0 0 8px var(--g); }
+  .pips i.now { border-color: var(--g); animation: blink 1s steps(1) infinite; }
+  #clock { font-size: 1.3em; color: var(--hi); font-variant-numeric: tabular-nums; }
+  .hud-btn {
+    background: none; border: 1px solid var(--g-dim); color: var(--g); padding: 3px 10px; cursor: pointer;
+    font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: none; text-shadow: inherit;
+  }
+  .hud-btn:hover, .hud-btn:focus-visible { border-color: var(--g); outline: none; background: var(--g-bg); }
+
+  /* ------------------------------------------------------------ screens */
+  main { position: relative; z-index: 1; flex: 1; min-height: 0; overflow: auto; padding: 22px 18px 28px; }
+  .screen { display: none; max-width: 1180px; margin: 0 auto; }
+  .screen.on { display: block; animation: power .35s ease-out; }
+  @keyframes power { from { opacity: 0; filter: blur(2px); } }
+  .term-win {             /* solid backing so text stays readable over the falling code */
+    background: rgba(2, 10, 5, .88); border: 1px solid var(--g-dim); padding: 22px 28px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .65);
+  }
+  .lbl { font-size: .78em; letter-spacing: .16em; text-transform: uppercase; opacity: .8; }
+  .small { font-size: .85em; opacity: .85; }
+  .no { color: var(--red); text-shadow: 0 0 6px rgba(255, 77, 94, .5); }
+  .yes { color: var(--hi); text-shadow: 0 0 8px var(--g); }
+  .nearly { color: var(--amber); text-shadow: 0 0 6px rgba(255, 204, 51, .45); }
+
+  .glitch { position: relative; display: inline-block; font-weight: 700; color: var(--hi); letter-spacing: .08em; }
+  .glitch::before, .glitch::after {
+    content: attr(data-text); position: absolute; left: 0; top: 0; width: 100%; text-shadow: none; opacity: 0;
+  }
+  .glitch::before { color: var(--red); clip-path: inset(0 0 58% 0); animation: jolt 3.2s steps(1) infinite; }
+  .glitch::after { color: var(--cyan); clip-path: inset(52% 0 0 0); animation: jolt 2.7s steps(1) infinite reverse; }
+  @keyframes jolt {
+    0%, 88%, 100% { transform: none; opacity: 0; }
+    89% { transform: translate(-5px, -1px); opacity: .9; }
+    93% { transform: translate(4px, 1px); opacity: .9; }
+    96% { transform: translate(-2px, 0); opacity: .9; }
+  }
+
+  .go {
+    background: var(--g); color: var(--black); border: 0; padding: 12px 22px; font: inherit; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-shadow: none;
+    box-shadow: 0 0 18px rgba(57, 255, 122, .5);
+  }
+  .go:hover, .go:focus-visible { outline: 2px solid var(--hi); outline-offset: 3px; }
+  .go .k { opacity: .65; margin-right: 10px; }
+  .go.ghost { background: none; color: var(--g); border: 1px solid var(--g); box-shadow: none; text-shadow: inherit; }
+  .go.sure { background: var(--amber); }
+
+  /* ------------------------------------------------------------ intro */
+  .boot { white-space: pre-wrap; min-height: 9em; margin-bottom: 8px; }
+  .boot .warn { color: var(--amber); }
+  .boot .bad { color: var(--red); text-shadow: 0 0 8px rgba(255, 77, 94, .6); }
+  .title { font-size: clamp(30px, 7.5vmin, 80px); line-height: 1.1; margin: 12px 0 18px; }
+  .mission { max-width: 64ch; color: var(--hi); }
+  .actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 26px; }
+
+  /* ------------------------------------------------------------ a firewall */
+  .lv-tag { color: var(--amber); letter-spacing: .2em; text-transform: uppercase; font-size: .85em; }
+  .lv-name { font-size: clamp(24px, 4.8vmin, 48px); line-height: 1.2; margin: 2px 0 10px; text-transform: uppercase; }
+  .brief { color: var(--hi); max-width: 82ch; min-height: 3em; margin: 0 0 16px; }
+  .brief::before { content: "> "; color: var(--g); }
+  .box { border: 1px solid var(--g-dim); background: var(--g-bg); padding: 16px 18px; }
+
+  .console {
+    margin-top: 18px; padding: 14px 16px; border: 1px solid var(--g); background: rgba(2, 10, 5, .92);
+    box-shadow: inset 0 0 22px rgba(57, 255, 122, .14);
+  }
+  .console.shake { animation: shake .4s; }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .pw-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .pw-row label { font-weight: 700; letter-spacing: .1em; }
+  #pw {
+    flex: 1; min-width: 8ch; background: transparent; border: 0; border-bottom: 2px solid var(--g-dim); border-radius: 0;
+    padding: 2px; color: var(--hi); caret-color: var(--g); font: inherit; font-size: 1.5em; letter-spacing: .25em;
+    text-transform: uppercase; text-shadow: inherit;
+  }
+  #pw:focus { outline: none; border-bottom-color: var(--g); }
+  #status { min-height: 1.5em; margin-top: 10px; }
+
+  .flash {
+    position: fixed; inset: 0; z-index: 50; display: none; place-items: center; text-align: center;
+    background: rgba(2, 10, 5, .84);
+  }
+  .flash.on { display: grid; }
+  .flash .ft { font-size: clamp(34px, 9vmin, 110px); font-weight: 700; letter-spacing: .08em; }
+  .flash.bad .ft { color: var(--red); text-shadow: 0 0 18px rgba(255, 77, 94, .85); }
+  .flash.good .ft { color: var(--g); text-shadow: 0 0 18px rgba(57, 255, 122, .85); }
+  .flash .fs { letter-spacing: .25em; text-transform: uppercase; margin-top: 6px; }
+  .flash .fbar { width: min(520px, 70vw); height: 16px; border: 1px solid var(--g); margin: 18px auto 0; padding: 2px; }
+  .flash .fbar i { display: block; height: 100%; width: 0; background: var(--g); animation: fill var(--ms) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+
+  /* ------------------------------------------------------------ 1: memory grid */
+  .l1 { display: flex; gap: 34px; flex-wrap: wrap; align-items: flex-start; }
+  .memo {
+    border: 1px dashed var(--amber); color: var(--amber); padding: 12px 18px; transform: rotate(-1.5deg);
+    text-shadow: 0 0 6px rgba(255, 204, 51, .4); background: rgba(40, 30, 0, .35);
+  }
+  .coords { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 1.6em; font-weight: 700; }
+  .coords span { cursor: pointer; }
+  .coords span.done { text-decoration: line-through; opacity: .4; }
+  table.grid { border-collapse: collapse; font-size: 1.35em; }
+  .grid th { width: 2em; height: 1.8em; color: var(--g-2); font-weight: 400; }
+  .grid th.x { color: var(--hi); }
+  .grid td { width: 2em; height: 1.8em; text-align: center; border: 1px solid var(--g-dim); cursor: pointer; color: var(--hi); }
+  .grid td.x { background: rgba(57, 255, 122, .1); }
+  .grid td.on { background: var(--g); color: var(--black); text-shadow: none; }
+  .grid td.mark { outline: 2px solid var(--amber); outline-offset: -4px; color: var(--amber); }
+
+  /* ------------------------------------------------------------ 2: chat log */
+  .msg { margin: 12px 0; }
+  .msg .who { color: var(--cyan); text-shadow: 0 0 6px rgba(77, 232, 255, .45); }
+  .msg .who.bad { color: var(--red); text-shadow: 0 0 6px rgba(255, 77, 94, .5); }
+  .msg .at { opacity: .55; font-size: .85em; margin-left: 10px; }
+  .msg .txt.big { font-size: 1.9em; letter-spacing: .14em; color: var(--hi); overflow-wrap: anywhere; }
+
+  /* ------------------------------------------------------------ 3: pigpen */
+  .pig-msg { display: flex; flex-wrap: wrap; gap: 18px 1.7em; margin: 10px 0 16px; }
+  .pig-word { display: flex; gap: .35em; }
+  .pig-ch { cursor: pointer; color: var(--hi); filter: drop-shadow(0 0 4px rgba(57, 255, 122, .6)); }
+  .pig-ch.done { opacity: .3; filter: none; }
+  .pig { display: block; width: 2.6em; height: 2.6em; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .pig circle { fill: currentColor; stroke: none; }
+
+  /* ------------------------------------------------------------ 4: vault */
+  .l4 { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: start; }
+  .clue { display: flex; align-items: center; gap: 18px; padding: 8px 0; border-bottom: 1px dashed var(--g-dim); }
+  .digits { display: flex; gap: 6px; flex: 0 0 auto; }
+  .dg {
+    width: 1.9em; height: 2.1em; display: grid; place-items: center; border: 1px solid var(--g);
+    background: rgba(2, 10, 5, .6); color: var(--hi); font-size: 1.35em; cursor: pointer; user-select: none;
+  }
+  .dg.out { color: var(--red); border-color: rgba(255, 77, 94, .5); text-decoration: line-through; opacity: .55; }
+  .dg.in { background: var(--g); color: var(--black); text-shadow: none; }
+  .pad .digits { display: grid; grid-template-columns: repeat(5, auto); margin: 8px 0; }
+  .pad .small { max-width: 17em; }
+
+  /* ------------------------------------------------------------ mission complete */
+  #win { text-align: center; }
+  #win .term-win { max-width: 940px; margin: 0 auto; }
+  .win-log { display: inline-block; text-align: left; white-space: pre; margin: 4px 0 10px; }
+  .congrats { font-size: 1.7em; color: var(--hi); margin: 10px 0 4px; }
+  .prize {
+    display: inline-block; margin: 22px 0 26px; padding: 16px 30px; border: 2px solid var(--amber); color: var(--amber);
+    font-size: clamp(20px, 3.8vmin, 38px); font-weight: 700; text-shadow: 0 0 10px rgba(255, 204, 51, .6);
+    animation: glow 1.6s ease-in-out infinite;
+  }
+  @keyframes glow { 50% { box-shadow: 0 0 30px rgba(255, 204, 51, .55); } }
+  .stats { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 28px; }
+  .stats b { display: block; font-size: 1.8em; letter-spacing: .05em; }
+
+  @media (max-width: 900px) {
+    .l4 { grid-template-columns: minmax(0, 1fr); }
+    .hud { gap: 10px; padding: 8px 10px; }
+    .hud .brand span { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glitch::before, .glitch::after, .prize, .pips i.now { animation: none; }
+  }
+</style>
+</head>
+<body data-screen="intro">
+<canvas id="rain" aria-hidden="true"></canvas>
+<div class="crt" aria-hidden="true"></div>
+
+<header class="hud">
+  <span class="brand"><b>SKM</b><span>Escape Room</span></span>
+  <span class="pips" id="pips"></span>
+  <span id="layerTxt"></span>
+  <span class="grow"></span>
+  <span id="clock">--:--</span>
+  <button class="hud-btn" id="soundBtn">Sound: on</button>
+  <a class="hud-btn" href="/">&larr; Exit <span class="small">F1</span></a>
+</header>
+
+<main>
+  <section class="screen on" id="intro"><div class="term-win">
+    <div class="boot" id="boot"></div>
+    <div class="hidden" id="introRest">
+      <div class="title glitch" data-text="OPERATION SHUTDOWN">OPERATION SHUTDOWN</div>
+      <p class="mission">Your mission: crack the password on each firewall to reach the off switch.
+        You don't need to know anything about hacking &mdash; just keep your eyes open and think like
+        a detective.</p>
+      <div class="actions">
+        <button class="go" id="startBtn"><span class="k">[Enter]</span><span id="startTxt">Start mission</span></button>
+        <button class="go ghost hidden" id="freshBtn"><span class="k">[N]</span>New mission</button>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="screen" id="level">
+    <div class="lv-tag" id="lvTag"></div>
+    <div class="lv-name glitch" id="lvName"></div>
+    <p class="brief" id="brief"></p>
+    <div class="box" id="puzzle"></div>
+    <div class="console" id="console">
+      <form class="pw-row" id="pwForm" autocomplete="off">
+        <label for="pw" id="pwLabel">PASSWORD&gt;</label>
+        <input type="text" id="pw" spellcheck="false" autocomplete="off" autocapitalize="characters">
+        <button class="go" type="submit">Enter</button>
+      </form>
+      <div id="status"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="win"><div class="term-win">
+    <div class="title glitch" data-text="MISSION COMPLETE">MISSION COMPLETE</div>
+    <div><div class="win-log">&gt; GLITCH.exe ............... <span class="no">DELETED</span>
+&gt; school computers ......... <b>UNLOCKED</b>
+&gt; threat level ............. <b>ZERO</b></div></div>
+    <p class="congrats">Congratulations, agent!</p>
+    <p>You cracked all four firewalls and switched GLITCH off. The school is safe.</p>
+    <div class="prize">Speak to your teacher to claim your prize!</div>
+    <div class="stats">
+      <span>Time<b id="wTime"></b></span>
+      <span>Finished at<b id="wWhen"></b></span>
+    </div>
+    <button class="go ghost" id="againBtn">Start a new mission</button>
+  </div></section>
+</main>
+
+<div class="flash" id="flash"></div>
+
+<script src="/js/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const STORE = "classpi-escape";
+const LAYERS = 4;
+
+/* ------------------------------------------------------------ random */
+// Each mission has a seed, so neighbours get different passwords (they can
+// share how, not what) and a reload rebuilds exactly the same puzzles.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+function shuffle(rng, arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/* ------------------------------------------------------------ firewall 1: memory grid */
+// Each firewall is built from the seed: its password and a render for the puzzle.
+const GRID_ROWS = "ABCDEF", GRID_COLS = 8;
+
+// The password's letters go in random squares among digits and decoy letters.
+// No two letters ever touch, so the grid can't spell anything by accident, and
+// the digits skip 0 and 1 so they can't be mistaken for O and I.
+function fillGrid(rng, word) {
+  const grid = [...GRID_ROWS].map(() => Array(GRID_COLS).fill(""));
+  const letter = (r, c) => /[A-Z]/.test((grid[r] || [])[c] || "");
+  const cells = shuffle(rng, [...Array(GRID_ROWS.length * GRID_COLS).keys()]);
+  const place = (ch) => {
+    const k = cells.findIndex((n) => {
+      const r = Math.floor(n / GRID_COLS), c = n % GRID_COLS;
+      return !letter(r - 1, c) && !letter(r + 1, c) && !letter(r, c - 1) && !letter(r, c + 1);
+    });
+    if (k < 0) return null;
+    const n = cells.splice(k, 1)[0], r = Math.floor(n / GRID_COLS), c = n % GRID_COLS;
+    grid[r][c] = ch;
+    return GRID_ROWS[r] + (c + 1);
+  };
+  const coords = [];
+  for (const ch of word) {
+    const at = place(ch);
+    if (!at) return null;
+    coords.push(at);
+  }
+  for (let i = word.length; i < 12; i++) if (!place(ABC[Math.floor(rng() * 26)])) return null;
+  grid.forEach((row) => row.forEach((v, c) => { if (!v) row[c] = String(2 + Math.floor(rng() * 8)); }));
+  return { grid, coords };
+}
+
+function memoryGrid(rng) {
+  const word = pick(rng, ["PIXEL", "LASER", "ROBOT", "COMET", "ORBIT", "RADAR", "SONIC", "BLAZE", "GHOST", "TURBO", "NINJA", "CYBER"]);
+  let made;
+  do made = fillGrid(rng, word); while (!made);
+  const { grid, coords } = made;
+  return {
+    name: "The Memory Grid",
+    brief: "GLITCH has hidden the first password somewhere in its memory grid. It is so forgetful that it left itself a note saying exactly where to look - and we intercepted it!",
+    answer: word,
+    render(el) {
+      el.innerHTML = `<div class="l1">
+        <div class="memo"><div class="lbl">GLITCH.memo &middot; "where I hid it"</div>
+          <div class="coords">${coords.map((c) => `<span title="Click to tick it off">${c}</span>`).join("")}</div></div>
+        <table class="grid">
+          <tr><th></th>${[...Array(GRID_COLS).keys()].map((c) => `<th data-c="${c}">${c + 1}</th>`).join("")}</tr>
+          ${grid.map((row, r) => `<tr><th data-r="${r}">${GRID_ROWS[r]}</th>${row.map((ch, c) => `<td data-r="${r}" data-c="${c}">${ch}</td>`).join("")}</tr>`).join("")}
+        </table></div>`;
+      const table = el.querySelector(".grid");
+      const clear = () => table.querySelectorAll(".x, .on").forEach((x) => x.classList.remove("x", "on"));
+      // A crosshair along the row and column makes the squares easy to find.
+      table.addEventListener("mouseover", (e) => {
+        clear();
+        const td = e.target.closest("td");
+        if (!td) return;
+        table.querySelectorAll(`[data-r="${td.dataset.r}"], [data-c="${td.dataset.c}"]`).forEach((x) => x.classList.add("x"));
+        td.classList.add("on");
+      });
+      table.addEventListener("mouseleave", clear);
+      table.addEventListener("click", (e) => { const td = e.target.closest("td"); if (td) td.classList.toggle("mark"); });
+      el.querySelectorAll(".coords span").forEach((s) => s.addEventListener("click", () => s.classList.toggle("done")));
+    },
+  };
+}
+
+/* ------------------------------------------------------------ firewall 2: slippery fingers */
+const KEY_ROWS = ["QWERTYUIOP[", "ASDFGHJKL;", "ZXCVBNM,"];
+// What each letter comes out as with your hand one key too far to the right.
+const slip = (s) => s.replace(/[A-Z]/g, (ch) => {
+  const row = KEY_ROWS.find((k) => k.includes(ch));
+  return row[row.indexOf(ch) + 1];
+});
+
+function slipperyFingers(rng) {
+  const word = pick(rng, ["ROCKET", "DRAGON", "SHADOW", "VORTEX", "WIZARD", "KRAKEN", "GADGET", "VIKING", "PLANET", "MAGNET", "JIGSAW", "HACKER"]);
+  return {
+    name: "Slippery Fingers",
+    brief: "We found the second password in the school's IT chat. The network admin typed it in a hurry, with their hands in the wrong place on the keyboard - so it came out as nonsense.",
+    answer: word,
+    render(el) {
+      el.innerHTML = `<div class="lbl">#it-support &middot; school chat</div>
+        <div class="msg"><span class="who">net_admin</span><span class="at">08:59</span>
+          <div class="txt big">${slip("THE PASSWORD IS " + word)}</div></div>
+        <div class="msg"><span class="who">net_admin</span><span class="at">09:00</span>
+          <div class="txt">argh! my hands slipped ONE KEY TO THE RIGHT on the keyboard. you know what i meant :)</div></div>
+        <div class="msg"><span class="who bad">GLITCH</span><span class="at">09:00</span>
+          <div class="txt">ha ha. nobody will ever work that out.</div></div>`;
+    },
+  };
+}
+
+/* ------------------------------------------------------------ firewall 3: pigpen */
+// Pupils decode this with the printed key card, which shows just the four
+// diagrams (printables/escape-room-pigpen-key.pdf): A-I are the cells of a #
+// grid, J-R the same with a dot, S-V the wedges of an X, W-Z the wedges with a
+// dot. Each symbol is the lines around its letter.
+const PIG_BOX = [
+  ["right", "bottom"], ["left", "right", "bottom"], ["left", "bottom"],
+  ["top", "right", "bottom"], ["top", "right", "bottom", "left"], ["top", "left", "bottom"],
+  ["top", "right"], ["top", "left", "right"], ["top", "left"],
+];
+const PIG_SIDE = { top: "M5 5H35", bottom: "M5 35H35", left: "M5 5V35", right: "M35 5V35" };
+// Each wedge with where its dot goes: inside the V, clear of the point, so W
+// can't be mistaken for S.
+const PIG_WEDGE = {
+  top: ["M5 5L20 20L35 5", 20, 9], left: ["M5 5L20 20L5 35", 9, 20],
+  right: ["M35 5L20 20L35 35", 31, 20], bottom: ["M5 35L20 20L35 35", 20, 31],
+};
+
+function pigGlyph(ch) {
+  const i = ABC.indexOf(ch);
+  let d, x = 20, y = 20;
+  if (i < 18) d = PIG_BOX[i % 9].map((s) => PIG_SIDE[s]).join("");
+  else [d, x, y] = Object.values(PIG_WEDGE)[(i - 18) % 4];
+  const dot = (i >= 9 && i < 18) || i >= 22 ? `<circle cx="${x}" cy="${y}" r="3.2"/>` : "";
+  return `<svg class="pig" viewBox="0 0 40 40" aria-hidden="true"><path d="${d}"/>${dot}</svg>`;
+}
+
+function pigpen(rng) {
+  const word = pick(rng, ["FALCON", "PHOENIX", "PYTHON", "JAGUAR", "GALAXY", "ECLIPSE", "NEBULA", "COBRA", "TIGER", "PANTHER", "METEOR", "KOALA"]);
+  const words = ("THE PASSWORD IS " + word).split(" ");
+  return {
+    name: "The Pigpen Code",
+    brief: "GLITCH hides its secrets in Pigpen, an old code where every letter is drawn as a shape. You'll need the pigpen key card to read this message - ask your teacher for one.",
+    answer: word,
+    render(el) {
+      el.innerHTML = `<div class="lbl">Intercepted message</div>
+        <div class="pig-msg">${words.map((w) =>
+          `<span class="pig-word">${[...w].map((ch) => `<span class="pig-ch">${pigGlyph(ch)}</span>`).join("")}</span>`).join("")}</div>
+        <div class="small">Click a symbol to tick it off once you've worked it out.</div>`;
+      el.querySelectorAll(".pig-ch").forEach((s) => s.addEventListener("click", () => s.classList.toggle("done")));
+    },
+  };
+}
+
+/* ------------------------------------------------------------ firewall 4: vault */
+// [right number in the right place, right number in the wrong place]
+function score(guess, code) {
+  let right = 0, wrong = 0;
+  guess.forEach((d, i) => { if (d === code[i]) right++; else if (code.includes(d)) wrong++; });
+  return [right, wrong];
+}
+const CODES = [];
+DIGITS.forEach((a) => DIGITS.forEach((b) => DIGITS.forEach((c) => { if (a !== b && b !== c && a !== c) CODES.push([a, b, c]); })));
+
+// Five logged guesses that fit exactly one code: one where nothing is right,
+// then a mix of "right place" and "wrong place" lines, touching every digit
+// of the code at least once.
+function lockClues(rng, code) {
+  const clues = [{ g: shuffle(rng, DIGITS.filter((d) => !code.includes(d))).slice(0, 3), s: [0, 0] }];
+  while (clues.length < 5) {
+    const g = shuffle(rng, DIGITS).slice(0, 3), s = score(g, code);
+    if (s[0] > 1 || s[0] + s[1] === 0 || s[0] + s[1] > 2) continue;
+    if (clues.some((c) => c.g.join() === g.join())) continue;
+    clues.push({ g, s });
+  }
+  const kinds = clues.slice(1).map((c) => c.s.join(""));
+  if (kinds.filter((k) => k === "10").length > 2) return null;
+  if (!kinds.some((k) => k[0] === "0") || !kinds.some((k) => Number(k[0]) + Number(k[1]) === 2)) return null;
+  if (!code.every((d) => clues.some((c) => c.g.includes(d)))) return null;
+  const fits = CODES.filter((cand) => clues.every((c) => score(c.g, cand).join() === c.s.join()));
+  return fits.length === 1 ? shuffle(rng, clues) : null;
+}
+
+const SAYS = {
+  "00": `<span class="no">Nothing</span> is correct`,
+  "10": `One number is correct and in the <span class="yes">right place</span>`,
+  "01": `One number is correct but in the <span class="nearly">wrong place</span>`,
+  "02": `Two numbers are correct but both in the <span class="nearly">wrong place</span>`,
+  "11": `Two numbers are correct: one in the <span class="yes">right place</span> and one in the <span class="nearly">wrong place</span>`,
+};
+
+function vault(rng) {
+  const code = shuffle(rng, DIGITS).slice(0, 3);
+  let clues;
+  do clues = lockClues(rng, code); while (!clues);
+  return {
+    name: "The Vault",
+    brief: "The off switch is locked in a vault with a 3-digit code. All three digits are different. The vault logged five wrong guesses - and how close each one was. Work out the code!",
+    prompt: "VAULT CODE>",
+    answer: code.join(""),
+    render(el) {
+      const tile = (d) => `<b class="dg" data-d="${d}">${d}</b>`;
+      el.innerHTML = `<div class="l4">
+        <div><div class="lbl">Vault log &middot; 5 wrong guesses</div>
+          ${clues.map((c) => `<div class="clue"><span class="digits">${c.g.map(tile).join("")}</span><span>${SAYS[c.s.join("")]}</span></div>`).join("")}
+        </div>
+        <div class="pad"><div class="lbl">Notepad</div>
+          <div class="digits">${DIGITS.map(tile).join("")}</div>
+          <p class="small">Tap a digit once: <span class="no">not in the code</span>.
+            Twice: <span class="yes">in the code</span>. Three times: clear it.</p>
+        </div></div>`;
+      const marks = {};
+      el.addEventListener("click", (e) => {
+        const t = e.target.closest(".dg");
+        if (!t) return;
+        const d = t.dataset.d, m = marks[d] = ((marks[d] || 0) + 1) % 3;
+        el.querySelectorAll(`.dg[data-d="${d}"]`).forEach((x) => {
+          x.classList.toggle("out", m === 1);
+          x.classList.toggle("in", m === 2);
+        });
+      });
+    },
+  };
+}
+
+const FIREWALLS = [memoryGrid, slipperyFingers, pigpen, vault];
+
+/* ------------------------------------------------------------ mission state */
+// Kept for the browser session, so leaving by accident (Esc, F1) picks up
+// where it was; a restart of the Pi starts fresh for the next class.
+let S = null, level = null, busy = false, screen = "intro";
+
+function save() { try { sessionStorage.setItem(STORE, JSON.stringify(S)); } catch (_) {} }
+function load() { try { return JSON.parse(sessionStorage.getItem(STORE)); } catch (_) { return null; } }
+
+function newMission() {
+  S = { seed: Math.floor(Math.random() * 2 ** 31), layer: 0, start: Date.now(), end: 0 };
+  save();
+  startLayer();
+}
+
+function clockText(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600);
+  const mm = String(Math.floor(s / 60) % 60).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function hud() {
+  $("pips").innerHTML = [...Array(LAYERS).keys()].map((i) =>
+    `<i class="${S && i < S.layer ? "done" : S && i === S.layer ? "now" : ""}"></i>`).join("");
+  $("layerTxt").textContent = !S ? "standing by" : S.layer >= LAYERS ? "all firewalls down" : `firewall ${S.layer + 1} of ${LAYERS}`;
+  tick();
+}
+
+function tick() {
+  $("clock").textContent = S ? clockText((S.end || Date.now()) - S.start) : "--:--";
+}
+setInterval(tick, 1000);
+
+function showScreen(name) {
+  screen = name;
+  document.body.dataset.screen = name;
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === name));
+  rain.color = name === "win" ? "#ffcc33" : "#39ff7a";
+}
+
+// Types text out like a terminal; a newer run on the same element takes over.
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let hurry = false;
+function typeInto(el, text, ms = 9) {
+  const run = el._run = (el._run || 0) + 1;
+  return new Promise((done) => {
+    let i = 0;
+    const step = () => {
+      if (el._run !== run) return done();
+      if (hurry) i = text.length;
+      el.textContent = text.slice(0, ++i);
+      if (i >= text.length) return done();
+      setTimeout(step, ms);
+    };
+    step();
+  });
+}
+
+/* ------------------------------------------------------------ intro */
+const BOOT = [
+  ["SKM SECURE TERMINAL v4.2", ""],
+  ["> connecting to the school network ...... OK", ""],
+  ["> running a security scan ............... WARNING!", "warn"],
+  ["> unknown program found: GLITCH.exe", "warn"],
+  ["", ""],
+  ["!! GLITCH is a rogue AI. It has locked every computer in the school", "bad"],
+  ["!! and hidden its off switch behind FOUR firewalls.", "bad"],
+];
+let introReady = false;
+
+async function showIntro() {
+  showScreen("intro");
+  hud();
+  const out = $("boot");
+  out.innerHTML = "";
+  for (const [text, cls] of BOOT) {
+    const line = document.createElement("div");
+    line.className = cls;
+    line.innerHTML = "&nbsp;";
+    out.appendChild(line);
+    if (text) await typeInto(line, text, 8);
+    if (!hurry) await wait(140);
+  }
+  const going = S && S.layer < LAYERS;
+  $("startTxt").textContent = going ? `Continue: firewall ${S.layer + 1} of ${LAYERS}` : "Start mission";
+  $("freshBtn").classList.toggle("hidden", !going);
+  $("introRest").classList.remove("hidden");
+  introReady = true;
+  $("startBtn").focus();
+}
+
+function begin() {
+  if (S && S.layer < LAYERS) startLayer();
+  else newMission();
+}
+$("startBtn").addEventListener("click", begin);
+$("freshBtn").addEventListener("click", newMission);
+$("intro").addEventListener("click", () => { if (!introReady) hurry = true; });
+
+/* ------------------------------------------------------------ a firewall */
+function startLayer() {
+  hurry = false;
+  level = FIREWALLS[S.layer](mulberry32(S.seed + S.layer * 7919));
+  $("lvTag").textContent = `Firewall ${S.layer + 1} of ${LAYERS}`;
+  $("lvName").textContent = level.name;
+  $("lvName").dataset.text = level.name;
+  $("pwLabel").textContent = level.prompt || "PASSWORD>";
+  $("pw").value = "";
+  $("status").textContent = "";
+  const box = document.createElement("div");   // fresh each time, so no listeners linger
+  $("puzzle").replaceChildren(box);
+  level.render(box);
+  showScreen("level");
+  hud();
+  typeInto($("brief"), level.brief);
+  $("pw").focus();
+}
+
+// Forgive capitals, spaces and typing the whole sentence ("the password is ...").
+const tidy = (s) => s.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^(THE)?(PASSWORD|CODE)(IS)?/, "");
+
+const TAUNTS = [
+  "GLITCH: Ha! Nice try.",
+  "GLITCH: Wrong! Is that the best you've got?",
+  "GLITCH: Access denied. Beep boop.",
+  "GLITCH: Nope. I could do this all day.",
+];
+
+$("pwForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const guess = tidy($("pw").value);
+  if (busy || !guess) return;
+  busy = true;
+  if (guess === level.answer) {
+    sfx("good");
+    S.layer++;
+    if (S.layer >= LAYERS) S.end = Date.now();
+    save();
+    hud();
+    const last = S.layer >= LAYERS;
+    await flash("good", "ACCESS GRANTED", last ? "GLITCH is shutting down..." : `firewall ${S.layer} destroyed`, last ? 2600 : 2000);
+    busy = false;
+    if (last) { sfx("win"); showWin(); } else startLayer();
+  } else {
+    sfx("bad");
+    const con = $("console");
+    con.classList.remove("shake");
+    void con.offsetWidth;
+    con.classList.add("shake");
+    await flash("bad", "ACCESS DENIED", "", 900);
+    busy = false;
+    $("status").innerHTML = `<span class="no">${TAUNTS[Math.floor(Math.random() * TAUNTS.length)]}</span>`;
+    $("pw").focus();
+    $("pw").select();
+  }
+});
+
+function flash(kind, title, sub, ms) {
+  const f = $("flash");
+  f.className = "flash on " + kind;
+  f.innerHTML = `<div><div class="ft">${title}</div><div class="fs">${sub}</div>
+    ${kind === "good" ? `<div class="fbar"><i style="--ms:${ms - 300}ms"></i></div>` : ""}</div>`;
+  return new Promise((done) => setTimeout(() => { f.className = "flash"; done(); }, ms));
+}
+
+/* ------------------------------------------------------------ mission complete */
+function showWin() {
+  showScreen("win");
+  hud();
+  $("wTime").textContent = clockText(S.end - S.start);
+  $("wWhen").textContent = new Date(S.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+// Two clicks, so the screen the teacher needs to see can't vanish by accident.
+let againTimer = null;
+$("againBtn").addEventListener("click", () => {
+  const b = $("againBtn");
+  if (!b.classList.contains("sure")) {
+    b.classList.add("sure");
+    b.textContent = "Sure? Click again to start over";
+    againTimer = setTimeout(() => { b.classList.remove("sure"); b.textContent = "Start a new mission"; }, 4000);
+    return;
+  }
+  clearTimeout(againTimer);
+  b.classList.remove("sure");
+  b.textContent = "Start a new mission";
+  newMission();
+});
+
+/* ------------------------------------------------------------ keys */
+document.addEventListener("keydown", (e) => {
+  const onButton = e.target.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ");
+  if (screen === "intro") {
+    if (!introReady) { if (e.key !== "Escape" && e.key !== "F1") hurry = true; return; }
+    if (onButton) return;
+    if (e.key === "Enter") { e.preventDefault(); begin(); }
+    else if ((e.key === "n" || e.key === "N") && S && S.layer < LAYERS) newMission();
+    return;
+  }
+  if (screen !== "level" || onButton) return;
+  // Typing anywhere goes into the password box.
+  if (e.target !== $("pw") && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) $("pw").focus();
+});
+
+/* ------------------------------------------------------------ sound */
+let soundOn = true, ac = null;
+try { soundOn = sessionStorage.getItem(STORE + "-sound") !== "off"; } catch (_) {}
+function soundLabel() { $("soundBtn").textContent = "Sound: " + (soundOn ? "on" : "off"); }
+$("soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn;
+  try { sessionStorage.setItem(STORE + "-sound", soundOn ? "on" : "off"); } catch (_) {}
+  soundLabel();
+});
+soundLabel();
+
+const TUNES = {
+  good: [[660, .08], [880, .08], [1320, .18]],
+  bad: [[140, .32]],
+  win: [[523, .12], [659, .12], [784, .12], [1047, .14], [784, .1], [1047, .4]],
+};
+function sfx(kind) {
+  if (!soundOn) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    let t = ac.currentTime;
+    TUNES[kind].forEach(([f, d]) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = kind === "bad" ? "sawtooth" : "square";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(.05, t);
+      g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      o.connect(g).connect(ac.destination);
+      o.start(t);
+      o.stop(t + d);
+      t += d;
+    });
+  } catch (_) { /* no audio device */ }
+}
+
+/* ------------------------------------------------------------ falling code */
+const rain = { color: "#39ff7a" };
+(function () {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = $("rain"), ctx = cv.getContext("2d"), FS = 18, CH = "0123456789ABCDEF<>/{}[]#$%&*+=";
+  const font = FS + "px " + getComputedStyle(document.body).fontFamily;
+  let drops = [], last = 0;
+  function size() {
+    cv.width = innerWidth;
+    cv.height = innerHeight;
+    drops = Array.from({ length: Math.ceil(cv.width / FS) }, () => -Math.floor(Math.random() * 60));
+  }
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (t - last < 66) return;   // ~15 fps is plenty, and kind to the Pi
+    last = t;
+    ctx.fillStyle = "rgba(2, 10, 5, .14)";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = rain.color;
+    ctx.font = font;
+    drops.forEach((y, i) => {
+      ctx.fillText(CH[Math.floor(Math.random() * CH.length)], i * FS, y * FS);
+      drops[i] = y * FS > cv.height && Math.random() > .97 ? 0 : y + 1;
+    });
+  }
+  addEventListener("resize", size);
+  size();
+  requestAnimationFrame(frame);
+})();
+
+/* ------------------------------------------------------------ start */
+S = load();
+if (S && S.layer >= LAYERS) showWin();
+else showIntro();
+</script>
+</body>
+</html>

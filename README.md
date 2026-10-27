@@ -21,6 +21,7 @@ too.
 | **Network Lab** | Send a message between Pis, optionally through a "man in the middle", and toggle encryption to show why it matters. Skin the sender and receiver as real apps (chat, email, a login screen, a card payment) while the interceptor's screen stays raw. See below. |
 | **Revision Quiz** | Multiple-choice questions by topic across N5 and Higher, with best-score tracking. Editable question bank. |
 | **Timer & Picker** | Lesson countdown with presets and an end-of-time sound, plus a random name picker. |
+| **Escape Room** | A full-screen hacker-terminal puzzle for younger pupils (S1 / P7): crack four passwords to shut down a rogue AI, then speak to the teacher for a prize. No prior knowledge needed. See below. |
 | **System** | Live Pi health (temp, memory, disk, load, IP), Wi-Fi setup, one-click updates from GitHub, and restart / shutdown / exit-to-console behind a simple "Are you sure?". |
 | **Web Browser** | A real Chromium window — address bar, tabs, back button — opened on top of ClassPi. Locked down for a classroom (no downloads, extensions, dev tools or sign-in; safe search forced) with a **Back to ClassPi** button, a ClassPi bookmark and a Home button that lead back. |
 
@@ -356,6 +357,44 @@ the wire.
 
 ---
 
+## The Escape Room
+
+**Escape Room** (key **9**) takes over the whole screen as a green-on-black
+hacker terminal. A rogue AI called GLITCH has locked the school's computers,
+and pupils break through four firewalls to reach its off switch. Each firewall
+is a puzzle that leads to a password; type it in and the next one opens. It is
+aimed at 11–12 year olds and needs no computing knowledge at all.
+
+| Firewall | What pupils do |
+|----------|----------------|
+| **1. The Memory Grid** | Read grid squares (like *C4*) from GLITCH's note to spell the password. |
+| **2. Slippery Fingers** | A message typed with the hands one key to the right — decode it using their own keyboard. |
+| **3. The Pigpen Code** | Decode a message written in pigpen symbols using the printed **pigpen key card**. |
+| **4. The Vault** | Work out a 3-digit code from five logged guesses and how close each was, with a notepad to cross digits out. |
+
+> **Print the key card before the lesson.** Firewall 3 can't be solved without
+> it — the key is only on paper, never on screen. It's
+> [`printables/escape-room-pigpen-key.pdf`](printables/escape-room-pigpen-key.pdf):
+> four cards per A4 sheet, cut along the dashed lines. Hand them out, or hide
+> them around the room for an extra challenge (the game tells pupils to ask
+> you for one).
+
+When all four are done the screen says **Mission complete** and tells the
+pupil to **speak to the teacher to claim a prize**, with their time. That
+screen stays up (even if they leave and come back) until someone clicks
+*Start a new mission* twice.
+
+- **Every mission is different.** The passwords are generated fresh each time,
+  so pupils can share *how* they solved a firewall but not the answer itself.
+- **There are no hints.** Pupils work each firewall out for themselves (or
+  with you).
+- **Leaving is safe.** *Exit* (or F1) goes back to the desktop, and reopening
+  the app offers *Continue*. Restarting the Pi clears it, ready for the next
+  class.
+- There's a **Sound** switch in the top bar for the beeps.
+
+---
+
 ## Changing things
 
 - **Settings** live in `/etc/classpi/config.json` (device name, shared key,
@@ -391,6 +430,8 @@ classpi/
 ├── branding/
 │   ├── make_splash.py      regenerates the boot splash
 │   └── splash.png          boot splash image
+├── printables/
+│   └── escape-room-pigpen-key.pdf   key card for the Escape Room (print it)
 └── app/
     ├── server.py           local app server (launcher + apps + APIs)
     ├── netnode.py          Network Lab node (runs on every Pi)
