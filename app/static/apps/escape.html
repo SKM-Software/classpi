@@ -48,6 +48,8 @@
     font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: none; text-shadow: inherit;
   }
   .hud-btn:hover, .hud-btn:focus-visible { border-color: var(--g); outline: none; background: var(--g-bg); }
+  .hud-btn.sure { border-color: var(--amber); color: var(--amber); }
+  body[data-screen="intro"] #exitBtn { visibility: hidden; }
 
   /* ------------------------------------------------------------ screens */
   main { position: relative; z-index: 1; flex: 1; min-height: 0; overflow: auto; padding: 22px 18px 28px; }
@@ -211,7 +213,7 @@
   <span class="grow"></span>
   <span id="clock">--:--</span>
   <button class="hud-btn" id="soundBtn">Sound: on</button>
-  <a class="hud-btn" href="/">&larr; Exit <span class="small">F1</span></a>
+  <button class="hud-btn" id="exitBtn">&larr; Exit</button>
 </header>
 
 <main>
@@ -223,8 +225,7 @@
         You don't need to know anything about hacking &mdash; just keep your eyes open and think like
         a detective.</p>
       <div class="actions">
-        <button class="go" id="startBtn"><span class="k">[Enter]</span><span id="startTxt">Start mission</span></button>
-        <button class="go ghost hidden" id="freshBtn"><span class="k">[N]</span>New mission</button>
+        <button class="go" id="startBtn"><span class="k">[Enter]</span>Start mission</button>
       </div>
     </div>
   </div></section>
@@ -256,7 +257,6 @@
       <span>Time<b id="wTime"></b></span>
       <span>Finished at<b id="wWhen"></b></span>
     </div>
-    <button class="go ghost" id="againBtn">Start a new mission</button>
   </div></section>
 </main>
 
@@ -265,7 +265,6 @@
 <script src="/js/common.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const STORE = "classpi-escape";
 const LAYERS = 4;
 
 /* ------------------------------------------------------------ random */
@@ -437,18 +436,19 @@ function score(guess, code) {
 const CODES = [];
 DIGITS.forEach((a) => DIGITS.forEach((b) => DIGITS.forEach((c) => { if (a !== b && b !== c && a !== c) CODES.push([a, b, c]); })));
 
-// Five logged guesses that fit exactly one code: one where nothing is right,
-// then a mix of "right place" and "wrong place" lines, touching every digit
-// of the code at least once.
+// Five logged guesses that fit exactly one code. Two where nothing is right
+// rule out six digits at once, leaving four for three places; then a mix of
+// "right place" and "wrong place" lines, touching every digit of the code.
 function lockClues(rng, code) {
-  const clues = [{ g: shuffle(rng, DIGITS.filter((d) => !code.includes(d))).slice(0, 3), s: [0, 0] }];
+  const out = shuffle(rng, DIGITS.filter((d) => !code.includes(d)));
+  const clues = [{ g: out.slice(0, 3), s: [0, 0] }, { g: out.slice(3, 6), s: [0, 0] }];
   while (clues.length < 5) {
     const g = shuffle(rng, DIGITS).slice(0, 3), s = score(g, code);
     if (s[0] > 1 || s[0] + s[1] === 0 || s[0] + s[1] > 2) continue;
     if (clues.some((c) => c.g.join() === g.join())) continue;
     clues.push({ g, s });
   }
-  const kinds = clues.slice(1).map((c) => c.s.join(""));
+  const kinds = clues.slice(2).map((c) => c.s.join(""));
   if (kinds.filter((k) => k === "10").length > 2) return null;
   if (!kinds.some((k) => k[0] === "0") || !kinds.some((k) => Number(k[0]) + Number(k[1]) === 2)) return null;
   if (!code.every((d) => clues.some((c) => c.g.includes(d)))) return null;
@@ -501,16 +501,12 @@ function vault(rng) {
 const FIREWALLS = [memoryGrid, slipperyFingers, pigpen, vault];
 
 /* ------------------------------------------------------------ mission state */
-// Kept for the browser session, so leaving by accident (Esc, F1) picks up
-// where it was; a restart of the Pi starts fresh for the next class.
+// Only ever in memory: opening the app, or pressing Exit, always starts afresh.
+// The clock starts when Start is pressed.
 let S = null, level = null, busy = false, screen = "intro";
-
-function save() { try { sessionStorage.setItem(STORE, JSON.stringify(S)); } catch (_) {} }
-function load() { try { return JSON.parse(sessionStorage.getItem(STORE)); } catch (_) { return null; } }
 
 function newMission() {
   S = { seed: Math.floor(Math.random() * 2 ** 31), layer: 0, start: Date.now(), end: 0 };
-  save();
   startLayer();
 }
 
@@ -570,6 +566,7 @@ const BOOT = [
 let introReady = false;
 
 async function showIntro() {
+  introReady = false;
   showScreen("intro");
   hud();
   const out = $("boot");
@@ -582,20 +579,12 @@ async function showIntro() {
     if (text) await typeInto(line, text, 8);
     if (!hurry) await wait(140);
   }
-  const going = S && S.layer < LAYERS;
-  $("startTxt").textContent = going ? `Continue: firewall ${S.layer + 1} of ${LAYERS}` : "Start mission";
-  $("freshBtn").classList.toggle("hidden", !going);
   $("introRest").classList.remove("hidden");
   introReady = true;
   $("startBtn").focus();
 }
 
-function begin() {
-  if (S && S.layer < LAYERS) startLayer();
-  else newMission();
-}
-$("startBtn").addEventListener("click", begin);
-$("freshBtn").addEventListener("click", newMission);
+$("startBtn").addEventListener("click", newMission);
 $("intro").addEventListener("click", () => { if (!introReady) hurry = true; });
 
 /* ------------------------------------------------------------ a firewall */
@@ -632,14 +621,15 @@ $("pwForm").addEventListener("submit", async (e) => {
   const guess = tidy($("pw").value);
   if (busy || !guess) return;
   busy = true;
+  const mission = S;   // if Exit is pressed during the flash, this mission is over
   if (guess === level.answer) {
     sfx("good");
     S.layer++;
     if (S.layer >= LAYERS) S.end = Date.now();
-    save();
     hud();
     const last = S.layer >= LAYERS;
     await flash("good", "ACCESS GRANTED", last ? "GLITCH is shutting down..." : `firewall ${S.layer} destroyed`, last ? 2600 : 2000);
+    if (S !== mission) return;
     busy = false;
     if (last) { sfx("win"); showWin(); } else startLayer();
   } else {
@@ -649,6 +639,7 @@ $("pwForm").addEventListener("submit", async (e) => {
     void con.offsetWidth;
     con.classList.add("shake");
     await flash("bad", "ACCESS DENIED", "", 900);
+    if (S !== mission) return;
     busy = false;
     $("status").innerHTML = `<span class="no">${TAUNTS[Math.floor(Math.random() * TAUNTS.length)]}</span>`;
     $("pw").focus();
@@ -672,30 +663,46 @@ function showWin() {
   $("wWhen").textContent = new Date(S.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-// Two clicks, so the screen the teacher needs to see can't vanish by accident.
-let againTimer = null;
-$("againBtn").addEventListener("click", () => {
-  const b = $("againBtn");
-  if (!b.classList.contains("sure")) {
-    b.classList.add("sure");
-    b.textContent = "Sure? Click again to start over";
-    againTimer = setTimeout(() => { b.classList.remove("sure"); b.textContent = "Start a new mission"; }, 4000);
+/* ------------------------------------------------------------ exit */
+// Exit ends the mission and goes back to the start screen; only F1 leaves the
+// Escape Room. Two clicks, so a stray one can't throw away a mission, or the
+// finished screen the teacher needs to see.
+let exitTimer = null;
+function exitLabel() {
+  clearTimeout(exitTimer);
+  $("exitBtn").classList.remove("sure");
+  $("exitBtn").innerHTML = "&larr; Exit";
+}
+$("exitBtn").addEventListener("click", () => {
+  if (!$("exitBtn").classList.contains("sure")) {
+    $("exitBtn").classList.add("sure");
+    $("exitBtn").textContent = "Sure? Click again";
+    exitTimer = setTimeout(exitLabel, 4000);
     return;
   }
-  clearTimeout(againTimer);
-  b.classList.remove("sure");
-  b.textContent = "Start a new mission";
-  newMission();
+  exitLabel();
+  S = null;
+  busy = false;
+  $("flash").className = "flash";
+  hurry = true;   // straight to the start screen, no boot sequence
+  showIntro();
 });
 
 /* ------------------------------------------------------------ keys */
+// Esc normally goes back to the desktop (common.js), and Alt+arrows or a
+// mouse's back button would leave the page; stop them all, so only F1 leaves.
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape") e.stopPropagation();
+  if (e.key === "BrowserBack" || e.key === "BrowserForward" || (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight"))) e.preventDefault();
+}, true);
+addEventListener("mouseup", (e) => { if (e.button === 3 || e.button === 4) e.preventDefault(); });
+
 document.addEventListener("keydown", (e) => {
   const onButton = e.target.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ");
   if (screen === "intro") {
-    if (!introReady) { if (e.key !== "Escape" && e.key !== "F1") hurry = true; return; }
+    if (!introReady) { if (e.key !== "F1") hurry = true; return; }
     if (onButton) return;
-    if (e.key === "Enter") { e.preventDefault(); begin(); }
-    else if ((e.key === "n" || e.key === "N") && S && S.layer < LAYERS) newMission();
+    if (e.key === "Enter") { e.preventDefault(); newMission(); }
     return;
   }
   if (screen !== "level" || onButton) return;
@@ -704,12 +711,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ------------------------------------------------------------ sound */
+const SOUND_KEY = "classpi-escape-sound";
 let soundOn = true, ac = null;
-try { soundOn = sessionStorage.getItem(STORE + "-sound") !== "off"; } catch (_) {}
+try { soundOn = sessionStorage.getItem(SOUND_KEY) !== "off"; } catch (_) {}
 function soundLabel() { $("soundBtn").textContent = "Sound: " + (soundOn ? "on" : "off"); }
 $("soundBtn").addEventListener("click", () => {
   soundOn = !soundOn;
-  try { sessionStorage.setItem(STORE + "-sound", soundOn ? "on" : "off"); } catch (_) {}
+  try { sessionStorage.setItem(SOUND_KEY, soundOn ? "on" : "off"); } catch (_) {}
   soundLabel();
 });
 soundLabel();
@@ -769,9 +777,7 @@ const rain = { color: "#39ff7a" };
 })();
 
 /* ------------------------------------------------------------ start */
-S = load();
-if (S && S.layer >= LAYERS) showWin();
-else showIntro();
+showIntro();
 </script>
 </body>
 </html>

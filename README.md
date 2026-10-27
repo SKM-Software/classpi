@@ -26,7 +26,8 @@ too.
 | **Web Browser** | A real Chromium window — address bar, tabs, back button — opened on top of ClassPi. Locked down for a classroom (no downloads, extensions, dev tools or sign-in; safe search forced) with a **Back to ClassPi** button, a ClassPi bookmark and a Home button that lead back. |
 
 Everything works with **arrow keys + Enter** and number-key shortcuts, and
-**Esc** always returns to the home screen.
+**Esc** returns to the home screen (**F1** in the Escape Room, which ignores
+Esc so pupils can't drop out by accident).
 
 ---
 
@@ -375,22 +376,23 @@ aimed at 11–12 year olds and needs no computing knowledge at all.
 > **Print the key card before the lesson.** Firewall 3 can't be solved without
 > it — the key is only on paper, never on screen. It's
 > [`printables/escape-room-pigpen-key.pdf`](printables/escape-room-pigpen-key.pdf):
-> four cards per A4 sheet, cut along the dashed lines. Hand them out, or hide
+> four cards per A4 sheet; cut it into quarters. Hand them out, or hide
 > them around the room for an extra challenge (the game tells pupils to ask
 > you for one).
 
 When all four are done the screen says **Mission complete** and tells the
 pupil to **speak to the teacher to claim a prize**, with their time. That
-screen stays up (even if they leave and come back) until someone clicks
-*Start a new mission* twice.
+screen stays up until someone presses *Exit*.
 
 - **Every mission is different.** The passwords are generated fresh each time,
   so pupils can share *how* they solved a firewall but not the answer itself.
 - **There are no hints.** Pupils work each firewall out for themselves (or
   with you).
-- **Leaving is safe.** *Exit* (or F1) goes back to the desktop, and reopening
-  the app offers *Continue*. Restarting the Pi clears it, ready for the next
-  class.
+- **Every go starts from the beginning.** *Exit* (top right, click twice)
+  ends the mission and goes back to the start screen; opening the app always
+  starts afresh too. The timer only runs once *Start mission* is pressed.
+- **Only F1 leaves.** Esc and the browser's back shortcuts are ignored, so the
+  only way back to the ClassPi desktop is F1.
 - There's a **Sound** switch in the top bar for the beeps.
 
 ---
